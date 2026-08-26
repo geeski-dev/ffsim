@@ -14,6 +14,9 @@ trap cleanup EXIT INT TERM
 source .venv/bin/activate
 uvicorn main:app --app-dir api --reload --port 8000 &
 pids+=("$!")
+# exec replaces this subshell with npm itself, so $! below is npm's real
+# PID (and killing it cascades to its vite child) instead of an orphaned
+# intermediate shell that `cd ... &&` would otherwise leave behind.
 (cd web && exec npm run dev) &
 pids+=("$!")
 wait
