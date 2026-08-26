@@ -24,16 +24,22 @@ export default function App() {
   const [league, setLeague] = useState<LeagueResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const requestIdRef = useRef(0);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
+      const requestId = ++requestIdRef.current;
       fetchLeague(settings)
         .then((res) => {
+          if (requestIdRef.current !== requestId) return;
           setLeague(res);
           setError(null);
         })
-        .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+        .catch((e) => {
+          if (requestIdRef.current !== requestId) return;
+          setError(e instanceof Error ? e.message : String(e));
+        });
     }, DEBOUNCE_MS);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -50,7 +56,7 @@ export default function App() {
         <div className="column-right">
           {error && <div className="error">Could not reach the API: {error}</div>}
           {!error && !league && <div className="loading">Loading...</div>}
-          {league && (
+          {!error && league && (
             <>
               <DraftPosition picks={league.picks} hedgeWindow={league.hedge_window} />
               <ScarcityTable rows={league.scarcity} />
