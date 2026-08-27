@@ -52,7 +52,7 @@ export default function App() {
   return (
     <div className="app">
       <div className="app-header">
-        <img src={logo} alt="Mispricing Engine logo" />
+        <img src={logo} alt="Mispricing Engine logo" width={36} height={36} />
         <h1>Mispricing Engine</h1>
       </div>
       <p className="tagline">Find the mispriced players, not the good ones.</p>

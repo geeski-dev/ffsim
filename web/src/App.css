@@ -1,7 +1,7 @@
 .app { max-width: 1400px; margin: 0 auto; padding: 24px; text-align: left; }
 
 .app-header { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
-.app-header img { height: 36px; width: 36px; }
+.app-header img { height: 36px; width: 36px; object-fit: contain; }
 .app-header h1 { margin: 0; font-size: 1.5rem; color: var(--ink); }
 .tagline { margin: 0 0 20px; color: var(--ink-mute); font-size: 0.95rem; }
 
