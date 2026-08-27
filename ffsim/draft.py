@@ -233,7 +233,7 @@ PRESETS: Dict[str, Strategy] = {
     "bpa":       Strategy("bpa", ceiling_weight=0.0, ev_cap=0.02),
     "balanced":  Strategy("balanced", ceiling_weight=0.25, risk_penalty=0.4, ev_cap=0.08),
     "ceiling":   Strategy("ceiling", ceiling_weight=0.75, risk_penalty=0.0, ev_cap=0.12),
-    "max_ceiling": Strategy("max_ceiling", ceiling_weight=1.0, risk_penalty=-0.2, ev_cap=0.25),
+    "max_ceiling": Strategy("max_ceiling", ceiling_weight=1.0, risk_penalty=0.0, ev_cap=0.25),
     "safe":      Strategy("safe", ceiling_weight=0.0, risk_penalty=1.2, ev_cap=0.03),
     # a real zero-RB tilt delays running backs, it does not refuse them; a
     # large negative bonus produces a roster that cannot fill its lineup
