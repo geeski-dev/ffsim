@@ -48,7 +48,8 @@ import pandas as pd
 
 from build_pool import slug_from_name
 from ffsim.config import League, Scoring
-from ffsim.draft import ARCHETYPES, PRESETS, Personality, Strategy, default_field
+from ffsim.draft import (ARCHETYPES, PRESETS, Personality, Strategy,
+                         _forced_positions, roster_caps, unfilled_starters)
 from ffsim.scoring import score_frame
 from ffsim.valuation import replacement_levels
 
@@ -489,25 +490,40 @@ def score_season(positions: np.ndarray, rosters: dict[int, list[int]],
 # own pick and every opponent's pick, consumed in snake order. That is fine
 # for the existing simulator, where every team draws from the same board.
 # Here it would silently break "identical opponent behaviour ... across all
-# three runs" (approved design): NULL's model picks via a stochastic
-# Personality (consumes rng draws), CEILING/REAL's model picks via a
-# deterministic Strategy (consumes none), so a single shared rng desyncs the
-# ELEVEN OPPONENTS' draws from each other the moment the model's stochastic
-# footprint differs between runs -- exactly the "draft luck" the common-
-# random-numbers requirement exists to remove. run_backtest_draft below is a
-# ~20-line reimplementation of run_draft's own loop (unchanged snake logic,
-# unchanged Strategy/Personality.choose calls) with two independent rng
-# streams: one that only ever touches the model's own slot, one shared by the
-# eleven opponents. This is not a modification of ffsim/draft.py -- it is a
-# local loop that calls ffsim's own Strategy/Personality objects, because
-# their shared-rng signature is what blocks the two-stream design.
+# three runs" (approved design) two different ways, one obvious, one not:
+#
+#   1. NULL's model picks via a stochastic Personality (consumes rng draws),
+#      CEILING/REAL's model picks via a deterministic Strategy (consumes
+#      none) -- a single shared rng desyncs every OTHER team's draws the
+#      moment the model's own stochastic footprint changes between runs.
+#
+#   2. Less obviously: even with the model's draws isolated onto their own
+#      stream, one rng SHARED SEQUENTIALLY by the eleven opponents still
+#      couples them to each other's draft-slot identity. Which slot is
+#      skipped (the model's) shifts which specific draw in the stream lands
+#      on which opponent, so swapping the model to a different slot silently
+#      reshuffles who gets which noise vector -- with only a handful of
+#      seeds that reshuffling shows up as a spurious slot-correlated bias
+#      that looks positional but is actually a shared-stream artifact (found
+#      while chasing the NULL self-test deviation: forcing every slot to the
+#      identical archetype still produced a 5.9-7.5 spread across slots).
+#
+# The fix for both is the same: give every slot -- all twelve, model
+# included -- its OWN independent rng stream, keyed by (season, seed, slot)
+# and nothing else. A slot's draws are then identical regardless of which
+# other slot is the model or which run (NULL/CEILING/REAL) is active.
+# run_backtest_draft is a ~20-line reimplementation of run_draft's own loop
+# (unchanged snake logic, unchanged Strategy/Personality.choose calls) built
+# around that. This is not a modification of ffsim/draft.py -- it is a local
+# loop calling ffsim's own Strategy/Personality objects, because their
+# shared-rng signature is what blocks the per-slot design.
 
 NULL_ARCHETYPE_ROTATION = ["adp", "adp", "sharp", "homer", "qb_early", "te_early",
                            "rb_heavy", "zero_rb", "asleep", "adp", "sharp", "homer"]
 
 
 def run_backtest_draft(board: pd.DataFrame, league: League, model_policy,
-                       field_: dict[int, Personality], rng_model, rng_opponents
+                       field_: dict[int, Personality], rngs: dict[int, np.random.Generator]
                        ) -> dict[int, list[int]]:
     n = len(board)
     avail = np.ones(n, dtype=bool)
@@ -520,17 +536,18 @@ def run_backtest_draft(board: pd.DataFrame, league: League, model_policy,
         slot = league.slot_of_pick(overall)
         rnd = (overall - 1) // league.teams + 1
         picks_left = league.rounds - len(rosters[slot])
+        rng = rngs[slot]
 
         if slot == league.slot:
             if isinstance(model_policy, Strategy):
                 idx = model_policy.choose(board, avail, counts[slot], league,
-                                          picks_left, recent, rng_model, overall, rnd)
+                                          picks_left, recent, rng, overall, rnd)
             else:
                 idx = model_policy.choose(board, avail, counts[slot], league,
-                                          picks_left, recent, rng_model)
+                                          picks_left, recent, rng)
         else:
             idx = field_[slot].choose(board, avail, counts[slot], league,
-                                      picks_left, recent, rng_opponents)
+                                      picks_left, recent, rng)
 
         avail[idx] = False
         rosters[slot].append(idx)
@@ -542,13 +559,38 @@ def run_backtest_draft(board: pd.DataFrame, league: League, model_policy,
 
 def _blind_field(league: League) -> dict[int, Personality]:
     """The eleven opponents, informationally identical across NULL/CEILING/
-    REAL: default_field's usual archetype mix and reach noise, with
-    bpa_weight zeroed so they are mathematically insensitive to whichever
-    'vor' column the model's own run has attached to the shared board.
-    Without this, CEILING would leak a sliver of perfect foresight into the
-    field too. (Approved design, stage-1 report judgment call #1.)"""
-    base = default_field(league, None)   # default_field never reads rng
-    return {slot: dataclasses.replace(p, bpa_weight=0.0) for slot, p in base.items()}
+    REAL: bpa_weight zeroed so they are mathematically insensitive to
+    whichever 'vor' column the model's own run has attached to the shared
+    board (without this, CEILING would leak a sliver of perfect foresight
+    into the field too -- approved design, stage-1 report judgment call #1).
+
+    Deliberately NOT ffsim.draft.default_field. default_field assigns
+    archetypes to opponents by a running count of non-model slots visited
+    (j = 0..10), not by raw slot position -- so it ALWAYS drops the
+    rotation's last entry (a second "homer") from the field, regardless of
+    which slot the model occupies, and shifts every archetype after the
+    model's slot down by one. _null_model_policy, by contrast, assigns the
+    model an archetype by its own raw slot position. Pooled across the 12
+    possible model slots, that mismatch made the model itself draw "homer"
+    twice while the field it faced only ever fielded one -- the model
+    over-sampled the weaker archetypes (homer/zero_rb/asleep/...) relative
+    to what the field actually contained, which is what pulled NULL's
+    self-test mean rank to 6.94 instead of 6.5 (review note, verified: see
+    the field+model archetype-multiset check in the stage-3 follow-up).
+
+    Building the field by raw slot position instead removes the confound:
+    for every model slot, field + model together reproduce the rotation's
+    exact multiset (adp x3, sharp x2, homer x2, one each of the rest) --
+    proven trivially, since the field is just the rotation with the model's
+    own (raw-indexed) entry removed, and the model IS that entry.
+    """
+    out = {}
+    for slot in range(1, league.teams + 1):
+        if slot == league.slot:
+            continue
+        arche = NULL_ARCHETYPE_ROTATION[(slot - 1) % len(NULL_ARCHETYPE_ROTATION)]
+        out[slot] = dataclasses.replace(ARCHETYPES[arche], bpa_weight=0.0)
+    return out
 
 
 def _null_model_policy(league: League) -> Personality:
@@ -622,13 +664,26 @@ def _rank_and_points(starter_pts: dict[int, float], model_slot: int) -> tuple[in
     return ordered.index(model_slot) + 1, starter_pts[model_slot]
 
 
-def _rng_pair(base_seed: int, season: int, seed_idx: int):
-    rng_model = np.random.default_rng([base_seed, season, seed_idx, 1])
-    rng_opponents = np.random.default_rng([base_seed, season, seed_idx, 0])
-    return rng_model, rng_opponents
+def _rngs_for_draft(base_seed: int, season: int, seed_idx: int,
+                    teams: int = TEAMS) -> dict[int, np.random.Generator]:
+    """One independent rng per slot -- see the run_backtest_draft comment for
+    why a shared stream (even one merely split model/opponents) leaks a
+    slot-position artifact into results."""
+    return {slot: np.random.default_rng([base_seed, season, seed_idx, slot])
+            for slot in range(1, teams + 1)}
 
 
-NULL_RANK_FLOOR, NULL_RANK_CEIL = 6.0, 7.0   # self-test band, see review note 1
+# self-test band, see review note 1. With _blind_field/_null_model_policy
+# both keyed by raw slot position, and every slot's rng independent of
+# whether that slot is currently playing the model or an opponent, the 12
+# "model slot" relabelings of a given (season, seed) are provably the SAME
+# 12-team draft simulated once -- summing every team's rank always gives
+# exactly 1+2+...+12=78 (verified directly: a single season/seed already
+# sums to 78). NULL's mean rank is therefore a mathematical identity at
+# 6.5000, not a statistical convergence -- the band below is tolerance for
+# floating-point tie-breaking in starter_pts, not sampling noise, so it is
+# deliberately tight. A deviation of even a few hundredths is a real bug.
+NULL_RANK_FLOOR, NULL_RANK_CEIL = 6.49, 6.51
 
 
 def run_null(seasons=SEASONS, seeds=range(8), base_seed: int = 0,
@@ -655,9 +710,8 @@ def run_null(seasons=SEASONS, seeds=range(8), base_seed: int = 0,
             model_policy = _null_model_policy(lg)
             field_ = _blind_field(lg)
             for seed_idx in seeds:
-                rng_model, rng_opp = _rng_pair(base_seed, season, seed_idx)
-                rosters = run_backtest_draft(board, lg, model_policy, field_,
-                                             rng_model, rng_opp)
+                rngs = _rngs_for_draft(base_seed, season, seed_idx, TEAMS)
+                rosters = run_backtest_draft(board, lg, model_policy, field_, rngs)
                 scored = score_season(positions, rosters, pts, played, prior, lg)
                 rank, points = _rank_and_points(scored["starter_pts"], slot)
                 rows.append(dict(run="NULL", season=season, slot=slot,
@@ -685,14 +739,87 @@ def run_ceiling(seasons=SEASONS, seeds=range(8), base_seed: int = 0,
             lg = dataclasses.replace(base_league, slot=slot)
             field_ = _blind_field(lg)
             for seed_idx in seeds:
-                rng_model, rng_opp = _rng_pair(base_seed, season, seed_idx)
-                rosters = run_backtest_draft(board, lg, strategy, field_,
-                                             rng_model, rng_opp)
+                rngs = _rngs_for_draft(base_seed, season, seed_idx, TEAMS)
+                rosters = run_backtest_draft(board, lg, strategy, field_, rngs)
                 scored = score_season(positions, rosters, pts, played, prior, lg)
                 rank, points = _rank_and_points(scored["starter_pts"], slot)
                 rows.append(dict(run="CEILING", season=season, slot=slot,
                                  seed=seed_idx, rank=rank, starter_pts=points))
     return pd.DataFrame(rows)
+
+
+class _NaivePoints:
+    """CEILING_NAIVE's drafting policy: take the highest raw projected points
+    among legal options, full stop -- no replacement level, no positional
+    scarcity, no need bonus, no risk shaping, no alpha. The only constraints
+    it respects are the same hard roster-legality ones every policy here
+    uses (position caps, and forced-fill once picks_left can no longer cover
+    the required starters) -- without those the comparison would conflate
+    "ignores value" with "drafts an unfillable roster", which isn't the
+    question this run asks. Reads `points_col` directly off the board; never
+    touches vor/vor_p85/vor_p15/replacement.
+    """
+    name = "naive_points"
+
+    def __init__(self, points_col: str = "realized_points"):
+        self.points_col = points_col
+
+    def choose(self, board: pd.DataFrame, avail: np.ndarray, counts: dict,
+              league: League, picks_left: int, recent, rng, overall: int = 0,
+              rnd: int = 1) -> int:
+        caps = roster_caps(league)
+        pos = board["position"].to_numpy()
+        legal = avail.copy()
+        for p, cap in caps.items():
+            if counts.get(p, 0) >= cap:
+                legal &= pos != p
+        if not legal.any():
+            legal = avail.copy()
+        if picks_left <= unfilled_starters(counts, league):
+            forced = _forced_positions(counts, league)
+            if forced:
+                mask = legal & np.isin(pos, list(forced))
+                if mask.any():
+                    legal = mask
+        points = board[self.points_col].to_numpy()
+        score = np.where(legal, points, -np.inf)
+        return int(np.argmax(score))
+
+
+def run_ceiling_naive(seasons=SEASONS, seeds=range(8), base_seed: int = 0,
+                      league: League = DEFAULT_LEAGUE, raw_dir: str = RAW_DIR
+                      ) -> pd.DataFrame:
+    """Same perfect-foresight projections as CEILING, same field, same seeds,
+    same slots, same lineup rule -- but the model just sorts by raw realised
+    points and drafts straight down, ignoring replacement level and
+    positional scarcity entirely. Separates what perfect information is
+    worth (this run vs NULL) from what the valuation layer adds on top of it
+    (CEILING vs this run). See review: "any drafter wins with perfect
+    projections" -- this is the version that tests exactly that claim."""
+    round_cap, _ = compute_round_cap(seasons, TEAMS, raw_dir)
+    base_league = _capped_league(league, round_cap)
+    policy = _NaivePoints("realized_points")
+    rows = []
+    for season in seasons:
+        board, pts, played, weeks, source = build_season_board(season, raw_dir)
+        board = _with_valuation(board, "realized_points", base_league)  # carries realized_points through unchanged
+        positions = board["position"].to_numpy()
+        prior = trailing_prior_ppg(season, board["key"].tolist(),
+                                   board["position"].tolist(), raw_dir)
+        for slot in range(1, TEAMS + 1):
+            lg = dataclasses.replace(base_league, slot=slot)
+            field_ = _blind_field(lg)
+            for seed_idx in seeds:
+                rngs = _rngs_for_draft(base_seed, season, seed_idx, TEAMS)
+                rosters = run_backtest_draft(board, lg, policy, field_, rngs)
+                scored = score_season(positions, rosters, pts, played, prior, lg)
+                rank, points = _rank_and_points(scored["starter_pts"], slot)
+                rows.append(dict(run="CEILING_NAIVE", season=season, slot=slot,
+                                 seed=seed_idx, rank=rank, starter_pts=points))
+    return pd.DataFrame(rows)
+
+
+RUN_ORDER = ["NULL", "CEILING_NAIVE", "CEILING", "REAL"]
 
 
 def _summarize(df: pd.DataFrame) -> pd.DataFrame:
@@ -701,15 +828,59 @@ def _summarize(df: pd.DataFrame) -> pd.DataFrame:
                win_rate=("rank", lambda r: (r == 1).mean()),
                mean_starter_pts=("starter_pts", "mean"),
                n=("rank", "size")).reset_index()
-    return out
+    out["run"] = pd.Categorical(out["run"], categories=RUN_ORDER, ordered=True)
+    return out.sort_values(["run", "season"])
+
+
+def report_all_runs(runs: dict[str, pd.DataFrame]) -> pd.DataFrame:
+    """One table, every run present, in RUN_ORDER. Stage 4 adds REAL to the
+    same dict and calls this same function -- no separate reporting path."""
+    all_df = pd.concat(runs.values(), ignore_index=True)
+    summary = _summarize(all_df)
+    print(summary.to_string(index=False))
+
+    agg = all_df.groupby("run").agg(mean_rank=("rank", "mean"),
+                                    win_rate=("rank", lambda r: (r == 1).mean()),
+                                    mean_starter_pts=("starter_pts", "mean"),
+                                    n=("rank", "size")).reset_index()
+    agg["run"] = pd.Categorical(agg["run"], categories=RUN_ORDER, ordered=True)
+    agg = agg.sort_values("run")
+    print("\naggregate, all seasons pooled (note: REAL, if present, may cover")
+    print("fewer seasons than the others -- n and the per-season table above")
+    print("are the guard against reading it as a like-for-like number):")
+    print(agg.to_string(index=False))
+
+    def _get(run, col):
+        row = agg.loc[agg["run"] == run]
+        return float(row[col].iloc[0]) if len(row) else float("nan")
+
+    print()
+    if "CEILING" in runs and "NULL" in runs:
+        print(f"CEILING - NULL:              rank {_get('CEILING','mean_rank') - _get('NULL','mean_rank'):+.2f}  "
+              f"pts {_get('CEILING','mean_starter_pts') - _get('NULL','mean_starter_pts'):+.1f}   "
+              f"(what perfect information is worth, architecture and all)")
+    if "CEILING_NAIVE" in runs and "NULL" in runs:
+        print(f"CEILING_NAIVE - NULL:        rank {_get('CEILING_NAIVE','mean_rank') - _get('NULL','mean_rank'):+.2f}  "
+              f"pts {_get('CEILING_NAIVE','mean_starter_pts') - _get('NULL','mean_starter_pts'):+.1f}   "
+              f"(what perfect PROJECTIONS alone are worth, no valuation layer)")
+    if "CEILING" in runs and "CEILING_NAIVE" in runs:
+        print(f"CEILING - CEILING_NAIVE:     rank {_get('CEILING','mean_rank') - _get('CEILING_NAIVE','mean_rank'):+.2f}  "
+              f"pts {_get('CEILING','mean_starter_pts') - _get('CEILING_NAIVE','mean_starter_pts'):+.1f}   "
+              f"(what the VALUATION layer adds on top of perfect projections)")
+    if "REAL" in runs and "NULL" in runs:
+        print(f"REAL - NULL:                 rank {_get('REAL','mean_rank') - _get('NULL','mean_rank'):+.2f}  "
+              f"pts {_get('REAL','mean_starter_pts') - _get('NULL','mean_starter_pts'):+.1f}   "
+              f"(the number that matters: is the architecture worth anything with REAL, imperfect projections)")
+    return agg
 
 
 def stage3_report(seasons=SEASONS, seeds=range(8), base_seed: int = 0,
-                  model_preset: str = "bpa", raw_dir: str = RAW_DIR) -> None:
+                  model_preset: str = "bpa", raw_dir: str = RAW_DIR
+                  ) -> dict[str, pd.DataFrame]:
     print_run_header(seasons, raw_dir)
-    print(f"STAGE 3 -- NULL vs CEILING, {len(list(seeds))} seeds x 12 slots x "
-          f"{len(seasons)} seasons = {len(list(seeds)) * TEAMS * len(seasons)} "
-          f"drafts each\n")
+    print(f"STAGE 3 -- NULL / CEILING_NAIVE / CEILING, {len(list(seeds))} seeds x "
+          f"12 slots x {len(seasons)} seasons = "
+          f"{len(list(seeds)) * TEAMS * len(seasons)} drafts each\n")
     print(f"model preset for CEILING: \"{model_preset}\" "
           f"(ceiling_weight={PRESETS[model_preset].ceiling_weight}, "
           f"risk_penalty={PRESETS[model_preset].risk_penalty}, "
@@ -723,37 +894,23 @@ def stage3_report(seasons=SEASONS, seeds=range(8), base_seed: int = 0,
 
     null_df = run_null(seasons, seeds, base_seed, raw_dir=raw_dir)
     null_mean_rank = null_df["rank"].mean()
-    print(f"NULL self-test: mean rank {null_mean_rank:.2f} of 12 across all "
-          f"seasons/slots/seeds (expected ~6.0-7.0 with no informational edge)")
+    print(f"NULL self-test: mean rank {null_mean_rank:.4f} of 12 across all "
+          f"seasons/slots/seeds (expected exactly 6.5000 -- a mathematical "
+          f"identity of this design, not a statistical average, see comment "
+          f"on NULL_RANK_FLOOR)")
     if not (NULL_RANK_FLOOR <= null_mean_rank <= NULL_RANK_CEIL):
         print(f"\n  !! OUTSIDE the {NULL_RANK_FLOOR}-{NULL_RANK_CEIL} band -- "
               f"treat this as a harness bug, not a finding. Stopping before "
               f"CEILING per review note 1.")
         print(_summarize(null_df).to_string(index=False))
-        return
-    print("  within band -- harness validated, proceeding to CEILING.\n")
+        return {"NULL": null_df}
+    print("  within band -- harness validated, proceeding.\n")
 
+    ceiling_naive_df = run_ceiling_naive(seasons, seeds, base_seed, raw_dir=raw_dir)
     ceiling_df = run_ceiling(seasons, seeds, base_seed, model_preset, raw_dir=raw_dir)
-    both = pd.concat([null_df, ceiling_df], ignore_index=True)
-    summary = _summarize(both)
-    print(summary.to_string(index=False))
-
-    agg = both.groupby("run").agg(mean_rank=("rank", "mean"),
-                                  win_rate=("rank", lambda r: (r == 1).mean()),
-                                  mean_starter_pts=("starter_pts", "mean")).reset_index()
-    print("\naggregate, all seasons pooled:")
-    print(agg.to_string(index=False))
-
-    null_rank = agg.loc[agg["run"] == "NULL", "mean_rank"].iloc[0]
-    ceil_rank = agg.loc[agg["run"] == "CEILING", "mean_rank"].iloc[0]
-    null_pts = agg.loc[agg["run"] == "NULL", "mean_starter_pts"].iloc[0]
-    ceil_pts = agg.loc[agg["run"] == "CEILING", "mean_starter_pts"].iloc[0]
-    print(f"\nCEILING - NULL: rank {ceil_rank - null_rank:+.2f} "
-          f"(negative = CEILING finishes higher), "
-          f"starter points {ceil_pts - null_pts:+.1f}")
-    print("This gap is the number that decides whether the architecture is "
-          "worth continuing: it is the most VOR-based drafting could possibly "
-          "win, given perfect projections.")
+    runs = {"NULL": null_df, "CEILING_NAIVE": ceiling_naive_df, "CEILING": ceiling_df}
+    report_all_runs(runs)
+    return runs
 
 
 if __name__ == "__main__":
