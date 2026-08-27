@@ -25,6 +25,7 @@ class LeagueSettingsRequest(BaseModel):
     lineup: LineupSettings = LineupSettings()
     playoff_teams: int = 4
     reserved_slots: int = 2
+    risk_profile: Literal["safe", "balanced", "ceiling", "max_ceiling"] = "balanced"
 
 
 class PickChip(BaseModel):
@@ -49,6 +50,8 @@ class PlayerRow(BaseModel):
     vor: float
     alpha: Optional[float] = None
     tier: int
+    weekly_cv: float
+    draft_score: float
 
 
 class LeagueResponse(BaseModel):

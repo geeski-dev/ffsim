@@ -11,7 +11,8 @@ import math
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
 
 from fastapi import FastAPI, HTTPException
 
@@ -31,7 +32,17 @@ from models import (
 
 app = FastAPI(title="ffsim API")
 
-POOL = ff.make_pool()
+# Real player pools, one per scoring format with a dedicated ADP/market
+# snapshot. There is no "standard" market snapshot (build_pool.py only
+# collects half_ppr/ppr), so standard scoring reuses the half_ppr pool --
+# component stats are scoring-format agnostic, only the ADP differs, and
+# half_ppr's ADP is the more neutral of the two available snapshots.
+POOL_FILES = {
+    "half_ppr": REPO_ROOT / "data" / "players_half_ppr.csv",
+    "ppr": REPO_ROOT / "data" / "players_ppr.csv",
+}
+POOLS = {key: ff.load_csv(str(path)) for key, path in POOL_FILES.items()}
+POOLS["standard"] = POOLS["half_ppr"]
 
 SCORING_BUILDERS = {
     "half_ppr": ff.Scoring.half_ppr,
@@ -61,7 +72,8 @@ def build_league(settings: LeagueSettingsRequest) -> ff.League:
 @app.post("/api/league", response_model=LeagueResponse)
 def api_league(settings: LeagueSettingsRequest) -> LeagueResponse:
     league = build_league(settings)
-    board = ff.build_board(POOL, league)
+    pool = POOLS[settings.scoring]
+    board = ff.build_board(pool, league)
     repl = replacement_levels(board, league)
     starters = effective_starters(board, league)
 
@@ -75,7 +87,11 @@ def api_league(settings: LeagueSettingsRequest) -> LeagueResponse:
         for pos in sorted(repl)
     ]
 
-    top = board.sort_values("vor", ascending=False).head(150)
+    ceiling_weight = ff.PRESETS[settings.risk_profile].ceiling_weight
+    board = board.copy()
+    board["draft_score"] = (1 - ceiling_weight) * board["vor"] + ceiling_weight * board["vor_p85"]
+
+    top = board.sort_values("draft_score", ascending=False).head(150)
     players = [
         PlayerRow(
             player_id=row.player_id,
@@ -86,6 +102,8 @@ def api_league(settings: LeagueSettingsRequest) -> LeagueResponse:
             vor=round(row.vor, 1),
             alpha=None if math.isnan(row.alpha) else round(row.alpha, 1),
             tier=int(row.tier),
+            weekly_cv=round(row.weekly_cv, 3),
+            draft_score=round(row.draft_score, 1),
         )
         for row in top.itertuples()
     ]
@@ -116,11 +134,12 @@ def api_league(settings: LeagueSettingsRequest) -> LeagueResponse:
 @app.post("/api/simulate", response_model=SimulateResponse)
 def api_simulate(req: SimulateRequest) -> SimulateResponse:
     league = build_league(req)
+    pool = POOLS[req.scoring]
     unknown = [s for s in req.strategies if s not in ff.PRESETS]
     if unknown:
         raise HTTPException(status_code=400, detail=f"unknown strategies: {unknown}")
 
-    summary, _detail = ff.evaluate(POOL, league, req.strategies, n_sims=req.n_sims, seed=0)
+    summary, _detail = ff.evaluate(pool, league, req.strategies, n_sims=req.n_sims, seed=0)
 
     results = [
         StrategyResultRow(
