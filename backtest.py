@@ -692,7 +692,7 @@ def run_null(seasons=SEASONS, seeds=range(8), base_seed: int = 0,
     the 12 teams -- model included -- is an ordinary blinded field member;
     see _null_model_policy. This is the thing CEILING has to beat, and its
     own aggregate stats are the harness self-test (review note 1)."""
-    round_cap, _ = compute_round_cap(seasons, TEAMS, raw_dir)
+    round_cap, _ = compute_round_cap(SEASONS, TEAMS, raw_dir)   # global cap, not this run's own subset
     base_league = _capped_league(league, round_cap)
     rows = []
     for season in seasons:
@@ -725,7 +725,7 @@ def run_ceiling(seasons=SEASONS, seeds=range(8), base_seed: int = 0,
     """Projections = the season's own realised points: the architecture with
     perfect foresight. Needs no ADP. Opponents stay blind to it (see
     _blind_field) -- only the model team's own valuation uses the future."""
-    round_cap, _ = compute_round_cap(seasons, TEAMS, raw_dir)
+    round_cap, _ = compute_round_cap(SEASONS, TEAMS, raw_dir)   # global cap, not this run's own subset
     base_league = _capped_league(league, round_cap)
     strategy = PRESETS[model_preset]
     rows = []
@@ -796,7 +796,7 @@ def run_ceiling_naive(seasons=SEASONS, seeds=range(8), base_seed: int = 0,
     worth (this run vs NULL) from what the valuation layer adds on top of it
     (CEILING vs this run). See review: "any drafter wins with perfect
     projections" -- this is the version that tests exactly that claim."""
-    round_cap, _ = compute_round_cap(seasons, TEAMS, raw_dir)
+    round_cap, _ = compute_round_cap(SEASONS, TEAMS, raw_dir)   # global cap, not this run's own subset
     base_league = _capped_league(league, round_cap)
     policy = _NaivePoints("realized_points")
     rows = []
@@ -909,6 +909,158 @@ def stage3_report(seasons=SEASONS, seeds=range(8), base_seed: int = 0,
     ceiling_naive_df = run_ceiling_naive(seasons, seeds, base_seed, raw_dir=raw_dir)
     ceiling_df = run_ceiling(seasons, seeds, base_seed, model_preset, raw_dir=raw_dir)
     runs = {"NULL": null_df, "CEILING_NAIVE": ceiling_naive_df, "CEILING": ceiling_df}
+    report_all_runs(runs)
+    return runs
+
+
+# ---------------------------------------------------------------------------
+# stage 4 -- ECR -> points curve, and REAL
+# ---------------------------------------------------------------------------
+# 2021 is excluded from REAL: inputs_as_of(2021)'s ecr_prior is empty (the
+# ECR archive starts in 2021 itself), so there is no prior-season rank->points
+# relationship to fit for it at all. Substituting a same-season fit (rank
+# against that season's own finish) was considered and rejected (per review):
+# the season's actual RB5 outscores the PRESEASON-consensus RB5 on average,
+# because projection error pushes the consensus pick down from where the
+# player actually finishes -- a same-season curve is systematically
+# optimistic in a way that does not cancel in VOR. Four honestly-built
+# seasons (2022-2025) beat five where one is fit differently. Every REAL
+# result is labelled with its season count for exactly this reason.
+
+REAL_SEASONS = [y for y in SEASONS if y != 2021]
+
+
+def fit_ecr_points_curve(season: int, raw_dir: str = RAW_DIR) -> dict:
+    """positional rank -> realised points, fit from seasons < `season` only
+    -- 'what has the consensus RB5 historically scored'. Routed entirely
+    through inputs_as_of, so fit_years is exactly what leaked in, and a thin
+    fit (e.g. 2022's single prior season) is visible in the return value
+    rather than assumed sound.
+    """
+    ia = inputs_as_of(season, raw_dir)
+    ecr_prior, weekly_prior = ia["ecr_prior"], ia["weekly_prior"]
+    if ecr_prior.empty:
+        raise ValueError(f"no prior-season ECR available before {season} -- "
+                         f"cannot fit a curve (this is why 2021 is dropped)")
+    fit_seasons = sorted(ecr_prior["season"].unique().tolist())
+
+    weekly_prior = weekly_prior.assign(fp=_weekly_points(weekly_prior))
+    season_totals = weekly_prior.groupby(["season", "key"])["fp"].sum()
+
+    rows = []
+    for s in fit_seasons:
+        e = ecr_prior[ecr_prior["season"] == s].copy()
+        e["pos_rank"] = e.groupby("source_position")["ecr"].rank(method="first")
+        e["points"] = [season_totals.get((s, k), 0.0) for k in e["key"]]
+        rows.append(e[["source_position", "pos_rank", "points"]])
+    train = pd.concat(rows, ignore_index=True)
+
+    curve = {pos: g.groupby("pos_rank")["points"].median()
+            for pos, g in train.groupby("source_position")}
+    return {"season": season, "fit_years": fit_seasons, "curve": curve,
+           "n_train": len(train)}
+
+
+def project_from_ecr(season: int, raw_dir: str = RAW_DIR) -> tuple[pd.DataFrame, dict]:
+    """Season Y's own preseason ECR (draft-day information, see module
+    docstring), turned into points via the curve fit strictly from < Y."""
+    fit = fit_ecr_points_curve(season, raw_dir)
+    curve = fit["curve"]
+    e = ecr_for_season(season, raw_dir).copy()
+    e["pos_rank"] = e.groupby("source_position")["ecr"].rank(method="first")
+
+    proj = np.empty(len(e))
+    n_extrap = 0
+    for i, (pos, rank) in enumerate(zip(e["source_position"], e["pos_rank"])):
+        c = curve.get(pos)
+        if c is None or c.empty:
+            proj[i] = np.nan
+            continue
+        if rank in c.index:
+            proj[i] = c.loc[rank]
+        elif rank > c.index.max():
+            proj[i] = c.iloc[-1]   # deeper than any prior season saw at this
+            n_extrap += 1           # position -- floor at the worst known value
+        else:
+            proj[i] = c.iloc[0]
+            n_extrap += 1
+    e["proj_points"] = proj
+    fit["n_missing_curve"] = int(np.isnan(proj).sum())
+    fit["n_extrapolated"] = n_extrap
+    return e, fit
+
+
+def build_real_board(season: int, raw_dir: str = RAW_DIR):
+    base, source = priced_baseline(season, raw_dir)
+    proj_df, fit_info = project_from_ecr(season, raw_dir)
+    proj_by_key = dict(zip(proj_df["key"], proj_df["proj_points"]))
+    base = base.assign(proj_points=[proj_by_key.get(k, np.nan) for k in base["key"]])
+    n_priced = len(base)
+    base = base.dropna(subset=["proj_points"]).reset_index(drop=True)
+    fit_info["n_priced"] = n_priced
+    fit_info["n_dropped_no_projection"] = n_priced - len(base)
+
+    keys = base["key"].tolist()
+    pts, played, weeks = realized_player_weeks(season, keys, raw_dir)
+    board = pd.DataFrame({
+        "key": keys,
+        "name": base["name"].tolist(),
+        "position": base["position"].tolist(),
+        "adp": base["adp"].to_numpy(dtype=float),
+        "realized_points": pts.sum(axis=1),
+        "realized_games": played.sum(axis=1),
+        "proj_points": base["proj_points"].to_numpy(dtype=float),
+    })
+    return board, pts, played, weeks, source, fit_info
+
+
+def run_real(seasons=REAL_SEASONS, seeds=range(8), base_seed: int = 0,
+            model_preset: str = "bpa", league: League = DEFAULT_LEAGUE,
+            raw_dir: str = RAW_DIR) -> pd.DataFrame:
+    """Projections from the ECR-fit curve. 2021 excluded by construction
+    (REAL_SEASONS). Opponents and lineup rule identical to every other run."""
+    round_cap, _ = compute_round_cap(SEASONS, TEAMS, raw_dir)   # global cap
+    base_league = _capped_league(league, round_cap)
+    strategy = PRESETS[model_preset]
+    rows = []
+    for season in seasons:
+        board, pts, played, weeks, source, fit_info = build_real_board(season, raw_dir)
+        print(f"  {season}: curve fit from {len(fit_info['fit_years'])} prior "
+              f"season(s) {fit_info['fit_years']} ({fit_info['n_train']} "
+              f"player-seasons), {fit_info['n_priced']} priced, "
+              f"{fit_info['n_dropped_no_projection']} dropped (no curve "
+              f"match), {fit_info['n_extrapolated']} rank-extrapolated")
+        board = _with_valuation(board, "proj_points", base_league)
+        positions = board["position"].to_numpy()
+        prior = trailing_prior_ppg(season, board["key"].tolist(),
+                                   board["position"].tolist(), raw_dir)
+        for slot in range(1, TEAMS + 1):
+            lg = dataclasses.replace(base_league, slot=slot)
+            field_ = _blind_field(lg)
+            for seed_idx in seeds:
+                rngs = _rngs_for_draft(base_seed, season, seed_idx, TEAMS)
+                rosters = run_backtest_draft(board, lg, strategy, field_, rngs)
+                scored = score_season(positions, rosters, pts, played, prior, lg)
+                rank, points = _rank_and_points(scored["starter_pts"], slot)
+                rows.append(dict(run="REAL", season=season, slot=slot,
+                                 seed=seed_idx, rank=rank, starter_pts=points))
+    return pd.DataFrame(rows)
+
+
+def full_report(seasons=SEASONS, real_seasons=REAL_SEASONS, seeds=range(8),
+                base_seed: int = 0, model_preset: str = "bpa",
+                raw_dir: str = RAW_DIR) -> dict[str, pd.DataFrame]:
+    """NULL, CEILING_NAIVE, CEILING, and REAL in one run, one table."""
+    runs = stage3_report(seasons, seeds, base_seed, model_preset, raw_dir)
+    if "CEILING" not in runs:
+        return runs   # NULL self-test failed; stage3_report already stopped
+
+    print(f"\nSTAGE 4 -- REAL, {len(list(seeds))} seeds x 12 slots x "
+          f"{len(real_seasons)} seasons (2021 dropped -- no prior ECR to fit "
+          f"its curve from)\n")
+    real_df = run_real(real_seasons, seeds, base_seed, model_preset, raw_dir=raw_dir)
+    runs["REAL"] = real_df
+    print()
     report_all_runs(runs)
     return runs
 
