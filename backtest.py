@@ -44,12 +44,16 @@ import numpy as np
 import pandas as pd
 
 from build_pool import slug_from_name
+from ffsim.config import League, Scoring
+from ffsim.scoring import score_frame
 
 RAW_DIR = "data/raw"
 SEASONS = list(range(2021, 2026))   # ECR archive coverage
 TEAMS = 12                          # full-PPR, matches the ECR archive's format
 
 FANTASY_POS = ["QB", "RB", "WR", "TE"]
+
+DEFAULT_LEAGUE = League(teams=TEAMS, scoring=Scoring.ppr())
 
 # ---------------------------------------------------------------------------
 # name normalisation
@@ -265,6 +269,165 @@ def stage1_report(seasons=SEASONS, raw_dir: str = RAW_DIR) -> None:
               f"can't tell apart from here):")
         for name, pos, ecr in jr["sample_misses"]:
             print(f"    {name:<22} {pos:<3} ECR {ecr}")
+
+
+# ---------------------------------------------------------------------------
+# stage 2 -- season scoring: realised starter points, knowable-that-week only
+# ---------------------------------------------------------------------------
+# The lineup-setting rule below is used IDENTICALLY by NULL, CEILING, and REAL
+# -- the only thing that differs between those three runs is what determines
+# the DRAFT (adp/ecr rank, realised season points, or the ECR-fit curve).
+# Perfect foresight belongs in the draft board, not the start/sit decision;
+# giving CEILING a clairvoyant week-to-week manager on top of a clairvoyant
+# draft would answer a question nobody asked. So every run's in-season
+# "belief" comes from the same source: each player's trailing prior-season
+# ppg (from inputs_as_of, point-in-time safe by construction), corrected
+# week by week toward what he has actually done THIS season so far.
+
+_COMPONENT_RENAME = {"pass_int": "interceptions", "rec": "receptions"}
+
+
+def _weekly_points(df: pd.DataFrame, league: League = DEFAULT_LEAGUE) -> pd.Series:
+    """Fantasy points for each row of a HIST_01-shaped weekly frame."""
+    return score_frame(df.rename(columns=_COMPONENT_RENAME), league.scoring)
+
+
+def realized_player_weeks(season: int, keys: list[str],
+                          raw_dir: str = RAW_DIR) -> tuple[np.ndarray, np.ndarray, list[int]]:
+    """Realised weekly points and played-flags for `keys`, aligned to their
+    order. Ground truth (see realized_weeks) -- used here purely to SCORE
+    rosters after the draft, and as the CEILING run's deliberate exception."""
+    weekly = realized_weeks(season, raw_dir)
+    weekly = weekly.assign(fp=_weekly_points(weekly))
+    weeks = sorted(weekly["week"].unique().tolist())
+    week_pos = {w: j for j, w in enumerate(weeks)}
+    idx = {k: i for i, k in enumerate(keys)}
+    n, W = len(keys), len(weeks)
+    pts = np.zeros((n, W))
+    played = np.zeros((n, W), dtype=bool)
+    for row in weekly.itertuples(index=False):
+        i = idx.get(row.key)
+        if i is None:
+            continue
+        j = week_pos[row.week]
+        pts[i, j] += row.fp
+        played[i, j] = True
+    return pts, played, weeks
+
+
+def trailing_prior_ppg(season: int, keys: list[str], positions: list[str],
+                       raw_dir: str = RAW_DIR) -> np.ndarray:
+    """Each player's preseason lineup-setting prior: his OWN ppg in the most
+    recent prior season if he has one, else that season's positional average.
+    Sourced entirely from inputs_as_of(season) -- point-in-time safe -- and
+    it is NOT a projection used for drafting or valuation; it exists only to
+    make the very first week's start/sit call sane before any of this
+    season's games have been played.
+    """
+    ia = inputs_as_of(season, raw_dir)
+    prior = ia["weekly_prior"]
+    if prior.empty:
+        raise ValueError(f"no prior-season data available before {season}")
+    last_season = prior["season"].max()
+    last = prior[prior["season"] == last_season].copy()
+    last = last.assign(fp=_weekly_points(last))
+    per_player = (last.groupby(["key", "source_position"])
+                  .agg(pts=("fp", "sum"), games=("fp", "size")).reset_index())
+    per_player["ppg"] = per_player["pts"] / per_player["games"]
+    ppg_by_key = dict(zip(per_player["key"], per_player["ppg"]))
+    pos_avg = per_player.groupby("source_position")["ppg"].mean().to_dict()
+    global_avg = float(per_player["ppg"].mean())
+
+    prior_ppg = np.empty(len(keys))
+    n_fallback = 0
+    for i, (k, pos) in enumerate(zip(keys, positions)):
+        if k in ppg_by_key:
+            prior_ppg[i] = ppg_by_key[k]
+        else:
+            prior_ppg[i] = pos_avg.get(pos, global_avg)
+            n_fallback += 1
+    print(f"  lineup prior: {len(keys) - n_fallback}/{len(keys)} players from "
+          f"{last_season} trailing ppg, {n_fallback} (rookies / unmatched) at "
+          f"that season's positional average")
+    return prior_ppg
+
+
+def belief_for_week(cum_pts: np.ndarray, cum_games: np.ndarray, weeks_revealed: int,
+                    week: int, preseason_prior: np.ndarray) -> np.ndarray:
+    """The only sanctioned way lineup-setting decides who starts in `week`.
+
+    This is the week-level analogue of inputs_as_of's season assert. The
+    assert is not a formality: "realised points-per-game so far" lives inside
+    a loop, it looks right at a glance, and an off-by-one here silently makes
+    every lineup a little clairvoyant without changing how the code reads.
+    weeks_revealed must equal exactly `week` -- the number of PRIOR weeks
+    folded into cum_pts/cum_games -- never `week` itself.
+    """
+    assert weeks_revealed == week, (
+        f"belief_for_week({week}): {weeks_revealed} weeks folded into cum stats, "
+        f"expected exactly {week} -- this would leak week {week}'s own outcome "
+        f"into its own lineup decision"
+    )
+    return np.where(cum_games > 0, cum_pts / np.maximum(cum_games, 1), preseason_prior)
+
+
+def _set_lineup_realized(roster: list[int], belief: np.ndarray, realized_w: np.ndarray,
+                         played_w: np.ndarray, positions: np.ndarray,
+                         league: League) -> float:
+    """Choose starters by belief, score them on this week's reality. Mirrors
+    ffsim.season._set_lineup's belief-then-score shape, reimplemented locally
+    (rather than imported) because that function is wired to the synthetic
+    simulator's own posterior, not to realised historical production."""
+    healthy = [i for i in roster if played_w[i]]
+    used: set[int] = set()
+    total = 0.0
+    for pos, cnt in league.lineup.items():
+        if pos == "FLEX":
+            continue
+        pool = sorted((i for i in healthy if positions[i] == pos and i not in used),
+                      key=lambda i: -belief[i])
+        for i in pool[:cnt]:
+            used.add(i)
+            total += realized_w[i]
+    flex_n = league.lineup.get("FLEX", 0)
+    if flex_n:
+        pool = sorted((i for i in healthy
+                       if positions[i] in league.flex_eligible and i not in used),
+                      key=lambda i: -belief[i])
+        for i in pool[:flex_n]:
+            used.add(i)
+            total += realized_w[i]
+    return total
+
+
+def score_season(positions: np.ndarray, rosters: dict[int, list[int]],
+                 pts: np.ndarray, played: np.ndarray, preseason_prior: np.ndarray,
+                 league: League = DEFAULT_LEAGUE) -> dict:
+    """Score every roster's season, one week at a time, on realised
+    production. Each week's lineup is chosen from belief_for_week's output
+    BEFORE that week's own results are folded into cum_pts/cum_games -- the
+    fold-in happens only after every team has already locked its lineup for
+    the week, which is what makes leaking week w into week w's own decision
+    structurally impossible rather than merely avoided by convention.
+    """
+    n, W = pts.shape
+    cum_pts = np.zeros(n)
+    cum_games = np.zeros(n)
+    starter_pts = {s: 0.0 for s in rosters}
+    weekly_totals = {s: np.zeros(W) for s in rosters}
+
+    for w in range(W):
+        belief = belief_for_week(cum_pts, cum_games, w, w, preseason_prior)
+        for s, roster in rosters.items():
+            p = _set_lineup_realized(roster, belief, pts[:, w], played[:, w],
+                                     positions, league)
+            weekly_totals[s][w] = p
+            starter_pts[s] += p
+        got = played[:, w]
+        cum_pts[got] += pts[got, w]
+        cum_games[got] += 1
+
+    return {"starter_pts": starter_pts, "weekly_totals": weekly_totals}
 
 
 if __name__ == "__main__":
