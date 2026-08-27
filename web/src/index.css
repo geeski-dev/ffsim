@@ -8,9 +8,11 @@
   --primary: #3DD68C;
   --primary-dim: #1F8F5C;
   --tertiary: #E5A94E;
-  --bargain-positive: #3DD68C;
+  --bargain-positive: var(--primary);
   --bargain-negative: #E8654F;
   --steady: #5EC2E8;
+  --error: var(--bargain-negative);
+  --error-tint: rgba(232, 101, 79, 0.12);
 }
 
 body {

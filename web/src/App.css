@@ -68,7 +68,7 @@ th[title] { text-decoration: underline dotted var(--rule); text-underline-offset
 .run-row button:disabled { opacity: 0.5; cursor: not-allowed; }
 .estimate { color: var(--ink-mute); font-size: 0.9rem; }
 
-.error { color: var(--bargain-negative); padding: 8px 12px; background: rgba(232, 101, 79, 0.12); border: 1px solid var(--bargain-negative); border-radius: 6px; }
+.error { color: var(--error); padding: 8px 12px; background: var(--error-tint); border: 1px solid var(--error); border-radius: 6px; }
 
 .loading { display: flex; align-items: center; gap: 10px; color: var(--ink-mute); }
 .spinner {
@@ -83,4 +83,5 @@ th[title] { text-decoration: underline dotted var(--rule); text-underline-offset
 @media (max-width: 800px) {
   .columns { flex-direction: column; }
   .column-left { flex: 1 1 auto; width: 100%; }
+  .column-right { flex: 1 1 auto; width: 100%; }
 }
