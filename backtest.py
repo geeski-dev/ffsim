@@ -741,18 +741,39 @@ def build_season_board(season: int, raw_dir: str = RAW_DIR
     return board, pts, played, weeks, source
 
 
-def _with_valuation(board: pd.DataFrame, points_col: str, league: League) -> pd.DataFrame:
-    """Attach vor from `points_col`. vor_p85/vor_p15/risk_index are set equal
-    to vor / 0 -- placeholders required by Strategy.choose's column access,
-    inert under ceiling_weight=0 and risk_penalty=0 (see the "bpa" preset
-    note in run_ceiling): this backtest does not exercise CL-000's
-    up_spread/down_spread/downside_weight machinery at all."""
+def _zscore(a: np.ndarray) -> np.ndarray:
+    sd = np.nanstd(a)
+    if not np.isfinite(sd) or sd == 0:
+        return np.zeros_like(a, dtype=float)
+    return (a - np.nanmean(a)) / sd
+
+
+def _with_valuation(board: pd.DataFrame, points_col: str, league: League,
+                    up_spread: np.ndarray | None = None,
+                    down_spread: np.ndarray | None = None,
+                    miss_rate: np.ndarray | None = None) -> pd.DataFrame:
+    """Attach vor from `points_col`. When up_spread/down_spread/miss_rate are
+    given (ADP_VOR, REAL -- see project_from_source/compute_risk_metrics),
+    vor_p85/vor_p15 and risk_index are the real thing: p85/p15 points via the
+    same 1.036-sigma convention ffsim.pool.prepare uses, risk_index the
+    z-score of miss_rate. Otherwise (CEILING, CEILING_NAIVE, NULL) they stay
+    the inert vor/0 placeholders -- CL-000's machinery only actually engages
+    where this backtest has real dispersion and risk data to feed it."""
     out = board.copy()
     repl = replacement_levels(out, league, points_col=points_col)
-    out["vor"] = out[points_col] - out["position"].map(repl).astype(float)
-    out["vor_p85"] = out["vor"]
-    out["vor_p15"] = out["vor"]
-    out["risk_index"] = 0.0
+    replacement = out["position"].map(repl).astype(float)
+    out["vor"] = out[points_col] - replacement
+
+    if up_spread is not None and down_spread is not None:
+        p85 = out[points_col].to_numpy() * (1 + 1.036 * up_spread)
+        p15 = out[points_col].to_numpy() * (1 - 1.036 * down_spread)
+        out["vor_p85"] = p85 - replacement.to_numpy()
+        out["vor_p15"] = p15 - replacement.to_numpy()
+    else:
+        out["vor_p85"] = out["vor"]
+        out["vor_p15"] = out["vor"]
+
+    out["risk_index"] = _zscore(miss_rate) if miss_rate is not None else 0.0
     return out
 
 
@@ -916,7 +937,7 @@ def run_ceiling_naive(seasons=SEASONS, seeds=range(8), base_seed: int = 0,
     return pd.DataFrame(rows)
 
 
-RUN_ORDER = ["NULL", "CEILING_NAIVE", "CEILING", "REAL"]
+RUN_ORDER = ["NULL", "ADP_VOR", "REAL_NAIVE", "REAL", "CEILING_NAIVE", "CEILING"]
 
 
 def _summarize(df: pd.DataFrame) -> pd.DataFrame:
@@ -951,23 +972,21 @@ def report_all_runs(runs: dict[str, pd.DataFrame]) -> pd.DataFrame:
         row = agg.loc[agg["run"] == run]
         return float(row[col].iloc[0]) if len(row) else float("nan")
 
+    def _gap(a, b, label):
+        if a in runs and b in runs:
+            print(f"{a} - {b}:{' ' * max(1, 26 - len(a) - len(b))}"
+                  f"rank {_get(a,'mean_rank') - _get(b,'mean_rank'):+.2f}  "
+                  f"pts {_get(a,'mean_starter_pts') - _get(b,'mean_starter_pts'):+.1f}   ({label})")
+
     print()
-    if "CEILING" in runs and "NULL" in runs:
-        print(f"CEILING - NULL:              rank {_get('CEILING','mean_rank') - _get('NULL','mean_rank'):+.2f}  "
-              f"pts {_get('CEILING','mean_starter_pts') - _get('NULL','mean_starter_pts'):+.1f}   "
-              f"(what perfect information is worth, architecture and all)")
-    if "CEILING_NAIVE" in runs and "NULL" in runs:
-        print(f"CEILING_NAIVE - NULL:        rank {_get('CEILING_NAIVE','mean_rank') - _get('NULL','mean_rank'):+.2f}  "
-              f"pts {_get('CEILING_NAIVE','mean_starter_pts') - _get('NULL','mean_starter_pts'):+.1f}   "
-              f"(what perfect PROJECTIONS alone are worth, no valuation layer)")
-    if "CEILING" in runs and "CEILING_NAIVE" in runs:
-        print(f"CEILING - CEILING_NAIVE:     rank {_get('CEILING','mean_rank') - _get('CEILING_NAIVE','mean_rank'):+.2f}  "
-              f"pts {_get('CEILING','mean_starter_pts') - _get('CEILING_NAIVE','mean_starter_pts'):+.1f}   "
-              f"(what the VALUATION layer adds on top of perfect projections)")
-    if "REAL" in runs and "NULL" in runs:
-        print(f"REAL - NULL:                 rank {_get('REAL','mean_rank') - _get('NULL','mean_rank'):+.2f}  "
-              f"pts {_get('REAL','mean_starter_pts') - _get('NULL','mean_starter_pts'):+.1f}   "
-              f"(the number that matters: is the architecture worth anything with REAL, imperfect projections)")
+    _gap("CEILING", "NULL", "what perfect information is worth, architecture and all")
+    _gap("CEILING_NAIVE", "NULL", "what perfect PROJECTIONS alone are worth, no valuation layer")
+    _gap("CEILING", "CEILING_NAIVE", "what the VALUATION layer adds on top of perfect projections")
+    _gap("ADP_VOR", "NULL", "same info as NULL, VOR instead of rank order -- valuation layer alone, real info")
+    _gap("REAL_NAIVE", "NULL", "ECR info, no valuation layer -- projection quality alone, no VOR")
+    _gap("REAL", "REAL_NAIVE", "what VOR adds on top of REAL's (imperfect) projections")
+    _gap("REAL", "ADP_VOR", "same valuation method, ECR vs ADP as the information source")
+    _gap("REAL", "NULL", "the number that matters: is the architecture worth anything with REAL, imperfect projections")
     return agg
 
 
@@ -1026,108 +1045,202 @@ def stage3_report(seasons=SEASONS, seeds=range(8), base_seed: int = 0,
 
 REAL_SEASONS = [y for y in SEASONS if y != 2021]
 
+# rank column and dispersion column for each information source a curve can
+# be fit from. adp_stdev/ecr_sd are both fully populated in the data on disk
+# (checked directly: 0 NaN across all seasons for both) -- no fallback
+# machinery is built for a missing-dispersion case that doesn't occur.
+SOURCE_COLUMNS = {
+    "ecr": dict(prior_key="ecr_prior", rank_col="ecr", sd_col="ecr_sd"),
+    "adp": dict(prior_key="adp_prior", rank_col="adp_overall", sd_col="adp_stdev"),
+}
 
-def fit_ecr_points_curve(season: int, raw_dir: str = RAW_DIR) -> dict:
+
+def _curve_lookup(curve: pd.Series, rank: float) -> float:
+    """Nearest-rank lookup; extrapolates flat beyond the fit's observed
+    range rather than guessing a shape past the data."""
+    if rank in curve.index:
+        return float(curve.loc[rank])
+    if rank > curve.index.max():
+        return float(curve.iloc[-1])
+    if rank < curve.index.min():
+        return float(curve.iloc[0])
+    idx = curve.index.to_numpy()
+    return float(curve.loc[idx[np.argmin(np.abs(idx - rank))]])
+
+
+def fit_rank_points_curve(season: int, source: str, raw_dir: str = RAW_DIR) -> dict:
     """positional rank -> realised points, fit from seasons < `season` only
-    -- 'what has the consensus RB5 historically scored'. Routed entirely
-    through inputs_as_of, so fit_years is exactly what leaked in, and a thin
-    fit (e.g. 2022's single prior season) is visible in the return value
-    rather than assumed sound.
+    -- 'what has the consensus RB5 historically scored'. `source` is 'ecr' or
+    'adp'; both route entirely through inputs_as_of, so fit_years is exactly
+    what leaked in and a thin fit (e.g. 2022 ECR: a single prior season) is
+    visible in the return value rather than assumed sound.
     """
+    cols = SOURCE_COLUMNS[source]
     ia = inputs_as_of(season, raw_dir)
-    ecr_prior, weekly_prior = ia["ecr_prior"], ia["weekly_prior"]
-    if ecr_prior.empty:
-        raise ValueError(f"no prior-season ECR available before {season} -- "
-                         f"cannot fit a curve (this is why 2021 is dropped)")
-    fit_seasons = sorted(ecr_prior["season"].unique().tolist())
+    rank_prior, weekly_prior = ia[cols["prior_key"]], ia["weekly_prior"]
+    if rank_prior.empty:
+        raise ValueError(f"no prior-season {source} data before {season} -- "
+                         f"cannot fit a curve (this is why 2021 is dropped for ECR)")
+    fit_seasons = sorted(rank_prior["season"].unique().tolist())
 
     weekly_prior = weekly_prior.assign(fp=_weekly_points(weekly_prior))
     season_totals = weekly_prior.groupby(["season", "key"])["fp"].sum()
 
     rows = []
     for s in fit_seasons:
-        e = ecr_prior[ecr_prior["season"] == s].copy()
-        e["pos_rank"] = e.groupby("source_position")["ecr"].rank(method="first")
+        e = rank_prior[rank_prior["season"] == s].copy()
+        e["pos_rank"] = e.groupby("source_position")[cols["rank_col"]].rank(method="first")
         e["points"] = [season_totals.get((s, k), 0.0) for k in e["key"]]
         rows.append(e[["source_position", "pos_rank", "points"]])
     train = pd.concat(rows, ignore_index=True)
 
     curve = {pos: g.groupby("pos_rank")["points"].median()
             for pos, g in train.groupby("source_position")}
-    return {"season": season, "fit_years": fit_seasons, "curve": curve,
-           "n_train": len(train)}
+    return {"season": season, "source": source, "fit_years": fit_seasons,
+           "curve": curve, "n_train": len(train)}
 
 
-def project_from_ecr(season: int, raw_dir: str = RAW_DIR) -> tuple[pd.DataFrame, dict]:
-    """Season Y's own preseason ECR (draft-day information, see module
-    docstring), turned into points via the curve fit strictly from < Y."""
-    fit = fit_ecr_points_curve(season, raw_dir)
+def project_from_source(season: int, source: str, raw_dir: str = RAW_DIR
+                        ) -> tuple[pd.DataFrame, dict]:
+    """Season Y's own preseason ranking (draft-day information, see module
+    docstring) turned into points via the curve fit strictly from < Y, plus
+    up_spread/down_spread propagated from the SAME source's own dispersion
+    figure (ecr_sd or adp_stdev) through the SAME curve: look up the points
+    the curve assigns at rank-sd (a plausibly-better outcome) and rank+sd (a
+    plausibly-worse one), and express the gap as a fraction of proj_points.
+    This is what CL-000's up_spread/down_spread/vor_p15 were built for and
+    never had real data to run on (see review item 2) -- a player the panel
+    disagreed about gets a wide vor_p85/vor_p15 gap, exactly what a
+    downside_weight or risk_penalty term needs to react to.
+    """
+    cols = SOURCE_COLUMNS[source]
+    fit = fit_rank_points_curve(season, source, raw_dir)
     curve = fit["curve"]
-    e = ecr_for_season(season, raw_dir).copy()
-    e["pos_rank"] = e.groupby("source_position")["ecr"].rank(method="first")
 
-    proj = np.empty(len(e))
-    n_extrap = 0
-    for i, (pos, rank) in enumerate(zip(e["source_position"], e["pos_rank"])):
+    if source == "ecr":
+        cur = ecr_for_season(season, raw_dir).copy()
+    else:
+        cur = _load_market05(season, raw_dir)
+        if cur is None:
+            raise ValueError(f"no historical ADP for {season}")
+        cur = cur.copy()
+    cur["pos_rank"] = cur.groupby("source_position")[cols["rank_col"]].rank(method="first")
+
+    positions = cur["source_position"].to_numpy()
+    ranks = cur["pos_rank"].to_numpy(dtype=float)
+    sds = cur[cols["sd_col"]].to_numpy(dtype=float)
+
+    n = len(cur)
+    proj = np.empty(n)
+    up_spread = np.empty(n)
+    down_spread = np.empty(n)
+    n_extrap = n_missing = 0
+    for i in range(n):
+        pos, rank, sd = positions[i], ranks[i], sds[i]
         c = curve.get(pos)
         if c is None or c.empty:
-            proj[i] = np.nan
+            proj[i] = up_spread[i] = down_spread[i] = np.nan
+            n_missing += 1
             continue
-        if rank in c.index:
-            proj[i] = c.loc[rank]
-        elif rank > c.index.max():
-            proj[i] = c.iloc[-1]   # deeper than any prior season saw at this
-            n_extrap += 1           # position -- floor at the worst known value
-        else:
-            proj[i] = c.iloc[0]
+        p = _curve_lookup(c, rank)
+        proj[i] = p
+        if rank > c.index.max() or rank < c.index.min():
             n_extrap += 1
-    e["proj_points"] = proj
-    fit["n_missing_curve"] = int(np.isnan(proj).sum())
+        if p > 0 and np.isfinite(sd) and sd > 0:
+            better = _curve_lookup(c, max(rank - sd, c.index.min()))
+            worse = _curve_lookup(c, rank + sd)
+            up_spread[i] = np.clip((better - p) / p, 0.0, 1.0)
+            down_spread[i] = np.clip((p - worse) / p, 0.0, 1.0)
+        else:
+            up_spread[i] = down_spread[i] = np.nan
+
+    cur["proj_points"] = proj
+    cur["up_spread"] = up_spread
+    cur["down_spread"] = down_spread
+    fit["n_missing_curve"] = n_missing
     fit["n_extrapolated"] = n_extrap
-    return e, fit
+    fit["n_missing_spread"] = int(np.isnan(up_spread).sum())
+    return cur, fit
 
 
-def build_real_board(season: int, raw_dir: str = RAW_DIR):
-    base, source = priced_baseline(season, raw_dir)
-    proj_df, fit_info = project_from_ecr(season, raw_dir)
+def build_source_board(season: int, source: str, raw_dir: str = RAW_DIR):
+    """Draft pool for `source` in {'ecr', 'adp'}: identity/adp always from
+    priced_baseline (so ADP_VOR's pool matches NULL's exactly), proj_points/
+    up_spread/down_spread from project_from_source, miss_rate/weekly_cv from
+    compute_risk_metrics. Players priced_baseline includes but the curve has
+    no rank for (name-join gap between the pricing source and this
+    projection source) are dropped, not defaulted -- counted and reported.
+    """
+    base, pool_source_label = priced_baseline(season, raw_dir)
+    proj_df, fit_info = project_from_source(season, source, raw_dir)
     proj_by_key = dict(zip(proj_df["key"], proj_df["proj_points"]))
-    base = base.assign(proj_points=[proj_by_key.get(k, np.nan) for k in base["key"]])
+    up_by_key = dict(zip(proj_df["key"], proj_df["up_spread"]))
+    down_by_key = dict(zip(proj_df["key"], proj_df["down_spread"]))
+
+    base = base.assign(
+        proj_points=[proj_by_key.get(k, np.nan) for k in base["key"]],
+        up_spread=[up_by_key.get(k, np.nan) for k in base["key"]],
+        down_spread=[down_by_key.get(k, np.nan) for k in base["key"]],
+    )
     n_priced = len(base)
-    base = base.dropna(subset=["proj_points"]).reset_index(drop=True)
+    base = base.dropna(subset=["proj_points", "up_spread", "down_spread"]).reset_index(drop=True)
     fit_info["n_priced"] = n_priced
     fit_info["n_dropped_no_projection"] = n_priced - len(base)
 
     keys = base["key"].tolist()
+    positions = base["position"].tolist()
     pts, played, weeks = realized_player_weeks(season, keys, raw_dir)
+    risk = compute_risk_metrics(season, keys, positions, raw_dir)
+
     board = pd.DataFrame({
         "key": keys,
         "name": base["name"].tolist(),
-        "position": base["position"].tolist(),
+        "position": positions,
         "adp": base["adp"].to_numpy(dtype=float),
         "realized_points": pts.sum(axis=1),
         "realized_games": played.sum(axis=1),
         "proj_points": base["proj_points"].to_numpy(dtype=float),
+        "up_spread": base["up_spread"].to_numpy(dtype=float),
+        "down_spread": base["down_spread"].to_numpy(dtype=float),
+        "miss_rate": risk["miss_rate"],
+        "weekly_cv": risk["weekly_cv"],
     })
-    return board, pts, played, weeks, source, fit_info
+    return board, pts, played, weeks, pool_source_label, fit_info
 
 
-def run_real(seasons=REAL_SEASONS, seeds=range(8), base_seed: int = 0,
-            model_preset: str = "bpa", league: League = DEFAULT_LEAGUE,
-            raw_dir: str = RAW_DIR) -> pd.DataFrame:
-    """Projections from the ECR-fit curve. 2021 excluded by construction
-    (REAL_SEASONS). Opponents and lineup rule identical to every other run."""
-    round_cap, _ = compute_round_cap(SEASONS, TEAMS, raw_dir)   # global cap
+# "bpa" (ceiling_weight=0, risk_penalty=0, downside_weight=0) is inert to
+# BOTH mechanisms this section wires in: risk_penalty*risk_index is the only
+# path that reads miss_rate at all, and vor_p85/vor_p15 (built from
+# up_spread/down_spread) only affect the score when ceiling_weight>0 or
+# downside_weight>0. BPA_RISK_AWARE keeps ceiling_weight=0 (still pure
+# replacement-level VOR, no upside-chasing) but engages both: risk_penalty=
+# 0.4 (== "balanced"'s own value) and downside_weight=0.35 (== "ceiling_
+# guarded"'s own value) -- both REUSED from already-calibrated ffsim presets,
+# not invented for this run, so nothing here is tuned toward a better REAL
+# number. Not added to ffsim.draft.PRESETS: a backtest-local diagnostic
+# combination, not a validated strategy recommendation.
+BPA_RISK_AWARE = dataclasses.replace(PRESETS["bpa"], name="bpa_risk_aware",
+                                     risk_penalty=0.4, downside_weight=0.35)
+
+
+def _run_vor_source(run_name: str, source: str, seasons, seeds, base_seed: int,
+                    strategy: Strategy, league: League, raw_dir: str) -> pd.DataFrame:
+    """Shared body for ADP_VOR and REAL: draft by VOR from `source`'s curve,
+    with real risk/dispersion wired in via `strategy`."""
+    round_cap, _ = compute_round_cap(SEASONS, TEAMS, raw_dir)
     base_league = _capped_league(league, round_cap)
-    strategy = PRESETS[model_preset]
     rows = []
     for season in seasons:
-        board, pts, played, weeks, source, fit_info = build_real_board(season, raw_dir)
-        print(f"  {season}: curve fit from {len(fit_info['fit_years'])} prior "
-              f"season(s) {fit_info['fit_years']} ({fit_info['n_train']} "
-              f"player-seasons), {fit_info['n_priced']} priced, "
-              f"{fit_info['n_dropped_no_projection']} dropped (no curve "
-              f"match), {fit_info['n_extrapolated']} rank-extrapolated")
-        board = _with_valuation(board, "proj_points", base_league)
+        board, pts, played, weeks, pool_source, fit_info = build_source_board(season, source, raw_dir)
+        print(f"  {season} [{run_name}]: curve fit from {len(fit_info['fit_years'])} "
+              f"prior season(s) {fit_info['fit_years']} ({fit_info['n_train']} "
+              f"player-seasons), pool={pool_source}, {fit_info['n_priced']} priced, "
+              f"{fit_info['n_dropped_no_projection']} dropped (no curve match), "
+              f"{fit_info['n_extrapolated']} rank-extrapolated")
+        board = _with_valuation(board, "proj_points", base_league,
+                                up_spread=board["up_spread"].to_numpy(),
+                                down_spread=board["down_spread"].to_numpy(),
+                                miss_rate=board["miss_rate"].to_numpy())
         positions = board["position"].to_numpy()
         prior = trailing_prior_ppg(season, board["key"].tolist(),
                                    board["position"].tolist(), raw_dir)
@@ -1139,26 +1252,99 @@ def run_real(seasons=REAL_SEASONS, seeds=range(8), base_seed: int = 0,
                 rosters = run_backtest_draft(board, lg, strategy, field_, rngs)
                 scored = score_season(positions, rosters, pts, played, prior, lg)
                 rank, points = _rank_and_points(scored["starter_pts"], slot)
-                rows.append(dict(run="REAL", season=season, slot=slot,
+                rows.append(dict(run=run_name, season=season, slot=slot,
                                  seed=seed_idx, rank=rank, starter_pts=points))
+    return pd.DataFrame(rows)
+
+
+def run_adp_vor(seasons=REAL_SEASONS, seeds=range(8), base_seed: int = 0,
+                strategy: Strategy = BPA_RISK_AWARE, league: League = DEFAULT_LEAGUE,
+                raw_dir: str = RAW_DIR) -> pd.DataFrame:
+    """Same information as NULL (historical ADP), different valuation (VOR,
+    risk/dispersion-aware). Isolates whether REAL's loss to NULL is caused
+    by the information source (ECR) or the valuation method (VOR) -- see
+    review item 3. 2021 excluded: the historical-ADP archive also starts in
+    2021, so fitting 2021's curve has the identical no-prior-data gap ECR
+    has -- same REAL_SEASONS, not a separate exclusion rule."""
+    return _run_vor_source("ADP_VOR", "adp", seasons, seeds, base_seed,
+                           strategy, league, raw_dir)
+
+
+def run_real(seasons=REAL_SEASONS, seeds=range(8), base_seed: int = 0,
+            strategy: Strategy = BPA_RISK_AWARE, league: League = DEFAULT_LEAGUE,
+            raw_dir: str = RAW_DIR) -> pd.DataFrame:
+    """Projections from the ECR-fit curve, now risk/dispersion-aware (see
+    BPA_RISK_AWARE). 2021 excluded by construction (REAL_SEASONS)."""
+    return _run_vor_source("REAL", "ecr", seasons, seeds, base_seed,
+                           strategy, league, raw_dir)
+
+
+def run_real_naive(seasons=REAL_SEASONS, seeds=range(8), base_seed: int = 0,
+                   league: League = DEFAULT_LEAGUE, raw_dir: str = RAW_DIR) -> pd.DataFrame:
+    """REAL's own CEILING_NAIVE: same ECR-curve projections, but sorted
+    straight by raw proj_points, ignoring replacement level, scarcity, risk,
+    and dispersion entirely. Completes the 2x3 grid this backtest now runs:
+    {ADP, ECR, perfect info} x {naive sort, VOR}."""
+    round_cap, _ = compute_round_cap(SEASONS, TEAMS, raw_dir)
+    base_league = _capped_league(league, round_cap)
+    policy = _NaivePoints("proj_points")
+    rows = []
+    for season in seasons:
+        board, pts, played, weeks, pool_source, fit_info = build_source_board(season, "ecr", raw_dir)
+        board = board.assign(vor=0.0)   # inert placeholder; field is blinded (bpa_weight=0), same as run_null
+        positions = board["position"].to_numpy()
+        prior = trailing_prior_ppg(season, board["key"].tolist(),
+                                   board["position"].tolist(), raw_dir)
+        for slot in range(1, TEAMS + 1):
+            lg = dataclasses.replace(base_league, slot=slot)
+            field_ = _blind_field(lg)
+            for seed_idx in seeds:
+                rngs = _rngs_for_draft(base_seed, season, seed_idx, TEAMS)
+                rosters = run_backtest_draft(board, lg, policy, field_, rngs)
+                scored = score_season(positions, rosters, pts, played, prior, lg)
+                rank, points = _rank_and_points(scored["starter_pts"], slot)
+                rows.append(dict(run="REAL_NAIVE", season=season, slot=slot,
+                                 seed=seed_idx, rank=rank, starter_pts=points))
+    return pd.DataFrame(rows)
+
+
+def sign_test(runs: dict[str, pd.DataFrame], against: str = "NULL") -> pd.DataFrame:
+    """For each run, how many of its seasons beat `against` on mean starter
+    points -- a coarser, harder-to-game-by-averaging companion to the pooled
+    mean (one very good or very bad season can otherwise dominate a pooled
+    average across seasons of different lengths/n)."""
+    base = runs[against].groupby("season")["starter_pts"].mean()
+    rows = []
+    for name, df in runs.items():
+        if name == against:
+            continue
+        by_season = df.groupby("season")["starter_pts"].mean()
+        common = by_season.index.intersection(base.index)
+        wins = int((by_season.loc[common] > base.loc[common]).sum())
+        rows.append(dict(run=name, seasons=len(common),
+                         beat_null=wins, of=len(common)))
     return pd.DataFrame(rows)
 
 
 def full_report(seasons=SEASONS, real_seasons=REAL_SEASONS, seeds=range(8),
                 base_seed: int = 0, model_preset: str = "bpa",
                 raw_dir: str = RAW_DIR) -> dict[str, pd.DataFrame]:
-    """NULL, CEILING_NAIVE, CEILING, and REAL in one run, one table."""
+    """NULL, ADP_VOR, REAL_NAIVE, REAL, CEILING_NAIVE, CEILING -- six runs,
+    one table, plus the sign test against NULL."""
     runs = stage3_report(seasons, seeds, base_seed, model_preset, raw_dir)
     if "CEILING" not in runs:
         return runs   # NULL self-test failed; stage3_report already stopped
 
-    print(f"\nSTAGE 4 -- REAL, {len(list(seeds))} seeds x 12 slots x "
-          f"{len(real_seasons)} seasons (2021 dropped -- no prior ECR to fit "
-          f"its curve from)\n")
-    real_df = run_real(real_seasons, seeds, base_seed, model_preset, raw_dir=raw_dir)
-    runs["REAL"] = real_df
+    print(f"\nSTAGE 4 -- ADP_VOR, REAL_NAIVE, REAL "
+          f"(risk_penalty=0.4, downside_weight=0.35 -- see BPA_RISK_AWARE), "
+          f"{len(list(seeds))} seeds x 12 slots\n")
+    runs["ADP_VOR"] = run_adp_vor(real_seasons, seeds, base_seed, raw_dir=raw_dir)
+    runs["REAL_NAIVE"] = run_real_naive(real_seasons, seeds, base_seed, raw_dir=raw_dir)
+    runs["REAL"] = run_real(real_seasons, seeds, base_seed, raw_dir=raw_dir)
     print()
     report_all_runs(runs)
+    print("\nsign test -- seasons beaten (mean starter pts > NULL's that season):")
+    print(sign_test(runs).to_string(index=False))
     return runs
 
 

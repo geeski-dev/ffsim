@@ -118,10 +118,58 @@ def test_hand_checked_season_total():
           weekly[6] == 20 + 15 + 12 + 10 + 9 + 8 + 6)
 
 
+# ---------------------------------------------------------------------------
+# regression: the 2023 board must not rank Nick Chubb top-3
+# ---------------------------------------------------------------------------
+# From the code review: the ECR-fit curve alone ranked Chubb (2023) the
+# 2nd-most valuable player in the entire draft based on positional-rank
+# history, with no way to see the ACL tear coming in week 2. Real ADP had
+# him going 12th. Risk (miss_rate) and dispersion (ecr_sd-propagated
+# up_spread/down_spread) were wired in specifically to give a risk-aware
+# strategy a way to decline that bet. This is the concrete, known-answer
+# case the review asked to keep as a permanent regression check -- it is
+# expected to catch this class of failure faster than any pooled aggregate,
+# and it is allowed to fail: if it does, that says the fix doesn't fully
+# work yet, which is a real finding, not a reason to weaken the assertion.
+
+def _strategy_score(board, strategy):
+    """Reimplements Strategy.choose's score formula (Strategy.choose itself
+    only returns the argmax index; this test needs the full ranking). Empty
+    roster / pick 1, so bonus and need are both 0 for every player -- this
+    is purely the value/risk/downside terms, which is what's under test."""
+    vor = board["vor"].to_numpy()
+    vor_p85 = board["vor_p85"].to_numpy()
+    vor_p15 = board["vor_p15"].to_numpy()
+    cw = strategy.ceiling_weight
+    blended = (1 - cw) * vor + cw * vor_p85
+    risk = board["risk_index"].to_numpy() * strategy.risk_penalty * 10.0
+    downside = (vor - vor_p15) * strategy.downside_weight
+    return blended - risk - downside
+
+
+def test_chubb_2023_not_top3_by_risk_aware_vor():
+    print("\n2023 board: Nick Chubb must not be a top-3 valued player "
+          "(risk/dispersion-aware VOR)")
+    board, pts, played, weeks, source, fit_info = bt.build_source_board(2023, "ecr")
+    board_v = bt._with_valuation(
+        board, "proj_points", bt.DEFAULT_LEAGUE,
+        up_spread=board["up_spread"].to_numpy(),
+        down_spread=board["down_spread"].to_numpy(),
+        miss_rate=board["miss_rate"].to_numpy(),
+    )
+    board_v = board_v.assign(score=_strategy_score(board_v, bt.BPA_RISK_AWARE))
+    ranked = board_v.sort_values("score", ascending=False).reset_index(drop=True)
+    chubb_rank = int(ranked.index[ranked["name"] == "Nick Chubb"][0]) + 1
+    print(f"  Nick Chubb's rank by risk-aware score: {chubb_rank} "
+          f"(top 5: {ranked['name'].head(5).tolist()})")
+    check("Chubb is not top-3 by risk/dispersion-aware VOR", chubb_rank > 3)
+
+
 if __name__ == "__main__":
     test_belief_guard_raises_on_a_real_off_by_one()
     test_week7_decision_does_not_know_about_the_breakout()
     test_hand_checked_season_total()
+    test_chubb_2023_not_top3_by_risk_aware_vor()
     print()
     if FAILURES:
         print(f"{FAILURES} check(s) FAILED")
