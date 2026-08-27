@@ -4,8 +4,8 @@ Two endpoints with very different cost profiles:
   POST /api/league    -- single-digit milliseconds, fires on every settings change
   POST /api/simulate   -- tens of seconds, fires only on explicit user action
 
-The player pool is deterministic (make_pool() is seeded), so it is built once
-at import time and reused across every request.
+The player pools are loaded from static CSVs (data/players_*.csv), so they are
+read once at import time and reused across every request.
 """
 import math
 import sys
