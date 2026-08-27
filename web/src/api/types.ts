@@ -8,6 +8,8 @@ export interface LineupSettings {
 
 export type ScoringMode = 'half_ppr' | 'ppr' | 'standard';
 
+export type RiskProfile = 'safe' | 'balanced' | 'ceiling' | 'max_ceiling';
+
 export interface LeagueSettings {
   teams: number;
   slot: number;
@@ -16,6 +18,7 @@ export interface LeagueSettings {
   lineup: LineupSettings;
   playoff_teams: number;
   reserved_slots: number;
+  risk_profile: RiskProfile;
 }
 
 export interface PickChip {
@@ -40,6 +43,8 @@ export interface PlayerRow {
   vor: number;
   alpha: number | null;
   tier: number;
+  weekly_cv: number;
+  draft_score: number;
 }
 
 export interface LeagueResponse {
