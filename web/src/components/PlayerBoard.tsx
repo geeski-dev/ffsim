@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { PlayerRow, RiskProfile } from '../api/types';
 
 interface Props {
@@ -68,11 +68,15 @@ export default function PlayerBoard({ players, riskProfile }: Props) {
   const [positionFilter, setPositionFilter] = useState<(typeof POSITIONS)[number]>('All');
 
   // Changing the risk profile must visibly re-sort the board by Draft Score --
-  // otherwise it looks like the control only affects the simulator.
-  useEffect(() => {
+  // otherwise it looks like the control only affects the simulator. Adjusted
+  // during render (not an Effect) so it lands in the same commit as the prop
+  // change instead of triggering an extra render.
+  const [prevRiskProfile, setPrevRiskProfile] = useState(riskProfile);
+  if (riskProfile !== prevRiskProfile) {
+    setPrevRiskProfile(riskProfile);
     setSortKey('draft_score');
     setSortDir('desc');
-  }, [riskProfile]);
+  }
 
   const rows = useMemo(() => {
     const filtered = positionFilter === 'All' ? players : players.filter((p) => p.position === positionFilter);
