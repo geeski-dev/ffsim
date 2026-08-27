@@ -51,6 +51,7 @@ def build_league(settings: LeagueSettingsRequest) -> ff.League:
             bench=settings.bench,
             scoring=scoring_fn(),
             playoff_teams=settings.playoff_teams,
+            reserved_slots=settings.reserved_slots,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -102,6 +103,8 @@ def api_league(settings: LeagueSettingsRequest) -> LeagueResponse:
         pick_numbers=pick_numbers,
         hedge_window=league.hedge_window(),
         rounds=league.rounds,
+        reserved_slots=league.reserved_slots,
+        total_rounds=league.total_rounds,
         describe=league.describe(),
         scarcity=scarcity,
         players=players,

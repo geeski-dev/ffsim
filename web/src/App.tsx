@@ -15,6 +15,7 @@ const DEFAULT_SETTINGS: LeagueSettings = {
   bench: 6,
   lineup: { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1 },
   playoff_teams: 4,
+  reserved_slots: 2,
 };
 
 const DEBOUNCE_MS = 300;
@@ -58,7 +59,13 @@ export default function App() {
           {!error && !league && <div className="loading">Loading...</div>}
           {!error && league && (
             <>
-              <DraftPosition picks={league.picks} hedgeWindow={league.hedge_window} />
+              <DraftPosition
+                picks={league.picks}
+                hedgeWindow={league.hedge_window}
+                rounds={league.rounds}
+                reservedSlots={league.reserved_slots}
+                totalRounds={league.total_rounds}
+              />
               <ScarcityTable rows={league.scarcity} />
               <PlayerBoard players={league.players} />
             </>

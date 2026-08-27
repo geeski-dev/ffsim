@@ -24,6 +24,7 @@ class LeagueSettingsRequest(BaseModel):
     bench: int = 6
     lineup: LineupSettings = LineupSettings()
     playoff_teams: int = 4
+    reserved_slots: int = 2
 
 
 class PickChip(BaseModel):
@@ -54,6 +55,8 @@ class LeagueResponse(BaseModel):
     pick_numbers: List[int]
     hedge_window: int
     rounds: int
+    reserved_slots: int
+    total_rounds: int
     describe: str
     scarcity: List[PositionScarcityRow]
     players: List[PlayerRow]

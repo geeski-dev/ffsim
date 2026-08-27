@@ -70,6 +70,7 @@ class League:
     flex_eligible: Tuple[str, ...] = ("RB", "WR", "TE")
     bench: int = 6
     scoring: Scoring = field(default_factory=Scoring.half_ppr)
+    reserved_slots: int = 2             # non-simulated roster spots, e.g. K/DST
 
     # season structure
     regular_weeks: int = 14
@@ -100,6 +101,10 @@ class League:
     @property
     def rounds(self) -> int:
         return self.roster_size
+
+    @property
+    def total_rounds(self) -> int:
+        return self.rounds + self.reserved_slots
 
     @property
     def total_picks(self) -> int:

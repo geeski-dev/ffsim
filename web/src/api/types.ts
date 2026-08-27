@@ -15,6 +15,7 @@ export interface LeagueSettings {
   bench: number;
   lineup: LineupSettings;
   playoff_teams: number;
+  reserved_slots: number;
 }
 
 export interface PickChip {
@@ -45,6 +46,8 @@ export interface LeagueResponse {
   pick_numbers: number[];
   hedge_window: number;
   rounds: number;
+  reserved_slots: number;
+  total_rounds: number;
   describe: string;
   scarcity: PositionScarcityRow[];
   players: PlayerRow[];

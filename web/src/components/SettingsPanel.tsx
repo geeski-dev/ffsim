@@ -97,6 +97,16 @@ export default function SettingsPanel({ settings, onChange }: Props) {
           ))}
         </select>
       </label>
+
+      <label>
+        Reserved slots (K/DST)
+        <input
+          type="number"
+          min={0}
+          value={settings.reserved_slots}
+          onChange={(e) => update({ reserved_slots: Number(e.target.value) })}
+        />
+      </label>
     </div>
   );
 }

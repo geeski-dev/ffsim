@@ -3,12 +3,18 @@ import type { PickChip } from '../api/types';
 interface Props {
   picks: PickChip[];
   hedgeWindow: number;
+  rounds: number;
+  reservedSlots: number;
+  totalRounds: number;
 }
 
-export default function DraftPosition({ picks, hedgeWindow }: Props) {
+export default function DraftPosition({ picks, hedgeWindow, rounds, reservedSlots, totalRounds }: Props) {
   return (
     <div className="panel">
       <h2>Draft position</h2>
+      <div className="stat">
+        {rounds} skill rounds + {reservedSlots} reserved = {totalRounds} total
+      </div>
       <div className="stat">Hedge window: <strong>{hedgeWindow}</strong></div>
       <div className="pick-chips">
         {picks.map((p) => (
