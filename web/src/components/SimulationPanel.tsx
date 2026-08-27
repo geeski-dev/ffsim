@@ -88,7 +88,7 @@ export default function SimulationPanel({ settings }: Props) {
             </tbody>
           </table>
           <p className="noise-note">
-            With fewer than ~1000 simulations, differences of a few percentage points between strategies are within noise.
+            Differences under a few percentage points are noise below ~1000 sims.
           </p>
         </>
       )}
