@@ -114,6 +114,24 @@ def _load_hist01(raw_dir: str = RAW_DIR) -> pd.DataFrame:
     )
     df = df[df["season_type"].astype(str).str.upper().eq("REG")]
     df = df[df["source_position"].isin(FANTASY_POS)].copy()
+
+    # 2015-2020 rows are duplicated in the source file (~2x, ~3x in 2019 --
+    # found while sanity-checking a risk metric that reaches into this
+    # window: Nick Chubb's pre-2023 miss_rate came out at 0.64 before this
+    # fix). 2012-2014 and 2021-2025 are clean. Deduped on the raw player_id
+    # (not `key`, which is nickname-normalised and shouldn't be relied on to
+    # disambiguate two real players) before `key` is even computed, so every
+    # downstream sum/mean/std over this frame is protected uniformly rather
+    # than requiring each caller to independently be duplicate-safe.
+    n_before = len(df)
+    dup_mask = df.duplicated(["player_id", "season", "week"], keep=False)
+    affected_seasons = sorted(df.loc[dup_mask, "season"].unique().tolist())
+    df = df.drop_duplicates(["player_id", "season", "week"], keep="first")
+    n_dropped = n_before - len(df)
+    if n_dropped:
+        print(f"  HIST_01: dropped {n_dropped} duplicate (player, season, week) "
+              f"rows on load -- affected seasons {affected_seasons}")
+
     df["key"] = [key(n, p) for n, p in
                  zip(df["source_player_name"], df["source_position"])]
     return df
@@ -169,11 +187,19 @@ def inputs_as_of(season: int, raw_dir: str = RAW_DIR) -> dict:
     assert ecr_prior.empty or ecr_prior["season"].max() < season, \
         f"inputs_as_of({season}): ECR leaked >= {season}"
 
+    adp_frames = [_load_market05(s, raw_dir) for s in SEASONS if s < season]
+    adp_frames = [f for f in adp_frames if f is not None]
+    adp_prior = (pd.concat(adp_frames, ignore_index=True) if adp_frames
+                else pd.DataFrame(columns=["season", "key", "adp_overall", "adp_stdev"]))
+    assert adp_prior.empty or adp_prior["season"].max() < season, \
+        f"inputs_as_of({season}): historical ADP leaked >= {season}"
+
     fit_years = sorted(set(weekly_prior["season"].unique().tolist()))
     return {
         "season": season,
         "weekly_prior": weekly_prior,
         "ecr_prior": ecr_prior,
+        "adp_prior": adp_prior,
         "fit_years": fit_years,
     }
 
@@ -402,6 +428,77 @@ def trailing_prior_ppg(season: int, keys: list[str], positions: list[str],
           f"{last_season} trailing ppg, {n_fallback} (rookies / unmatched) at "
           f"that season's positional average")
     return prior_ppg
+
+
+MISS_RATE_WINDOW = 3   # trailing seasons, matches ffsim/build_pool's own convention
+
+
+def compute_risk_metrics(season: int, keys: list[str], positions: list[str],
+                         raw_dir: str = RAW_DIR) -> dict[str, np.ndarray]:
+    """miss_rate and weekly_cv, computed strictly from the 3 seasons before
+    `season` (inputs_as_of's weekly_prior) -- the real risk signal that was a
+    0.0 placeholder through stages 3-4 (see review: "the run that took Nick
+    Chubb had the one mechanism that could have declined him disabled").
+
+    miss_rate: 1 - (games with a production row / games possible) over the
+    trailing window, games possible = 17/season 2021+, 16 before (matches
+    the real 17-game/16-game NFL schedule, not a rounded constant).
+    weekly_cv: coefficient of variation of weekly points, averaged over
+    in-window seasons with >=4 games (too few games to make a season's CV
+    meaningful otherwise).
+
+    A player absent from the window entirely (rookie, or genuinely new to
+    the league) falls back to that window's own positional average -- not a
+    fabricated constant -- and the fallback count is reported, same
+    discipline as trailing_prior_ppg above.
+    """
+    ia = inputs_as_of(season, raw_dir)
+    prior = ia["weekly_prior"]
+    window = [season - 1, season - 2, season - 3]
+    w = prior[prior["season"].isin(window)].copy()
+    games_possible = sum(17 if s >= 2021 else 16 for s in window)
+
+    # nunique() per (key, season) first, THEN summed across the window --
+    # week numbers repeat every season (1..17/18), so a plain
+    # groupby("key")["week"].nunique() would collapse "week 1 in 2020" and
+    # "week 1 in 2022" into the same value and badly undercount true games
+    # played. Caught by a sanity check on Nick Chubb: this bug alone put his
+    # pre-2023 miss_rate at 0.64 (should be close to the ~0.14 RB default).
+    games_played = w.groupby(["key", "season"])["week"].nunique().groupby("key").sum()
+    miss_by_key = (1 - games_played / games_possible).clip(0.0, 1.0)
+
+    w = w.assign(fp=_weekly_points(w))
+    per_season = (w.groupby(["key", "season"])["fp"]
+                 .agg(mean="mean", sd="std", n="size").reset_index())
+    per_season = per_season[per_season["n"] >= 4]
+    per_season["cv"] = (per_season["sd"] / per_season["mean"].replace(0, np.nan)).clip(0.1, 1.5)
+    cv_by_key = per_season.groupby("key")["cv"].mean()
+
+    pos_default_miss = {"QB": 0.07, "RB": 0.14, "WR": 0.10, "TE": 0.10}
+    pos_default_cv = {"QB": 0.42, "RB": 0.62, "WR": 0.66, "TE": 0.71}
+    global_miss = float(miss_by_key.mean()) if len(miss_by_key) else 0.10
+    global_cv = float(cv_by_key.mean()) if len(cv_by_key) else 0.60
+
+    miss_rate = np.empty(len(keys))
+    weekly_cv = np.empty(len(keys))
+    n_fb_miss = n_fb_cv = 0
+    for i, (k, pos) in enumerate(zip(keys, positions)):
+        if k in miss_by_key.index:
+            miss_rate[i] = miss_by_key.loc[k]
+        else:
+            miss_rate[i] = pos_default_miss.get(pos, global_miss)
+            n_fb_miss += 1
+        if k in cv_by_key.index:
+            weekly_cv[i] = cv_by_key.loc[k]
+        else:
+            weekly_cv[i] = pos_default_cv.get(pos, global_cv)
+            n_fb_cv += 1
+
+    print(f"  risk metrics ({window[2]}-{window[0]}): miss_rate "
+          f"{len(keys) - n_fb_miss}/{len(keys)} measured, weekly_cv "
+          f"{len(keys) - n_fb_cv}/{len(keys)} measured (rest at positional "
+          f"default)")
+    return {"miss_rate": miss_rate, "weekly_cv": weekly_cv}
 
 
 def belief_for_week(cum_pts: np.ndarray, cum_games: np.ndarray, weeks_revealed: int,
