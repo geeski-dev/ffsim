@@ -174,6 +174,7 @@ class Strategy:
     name: str = "balanced"
     ceiling_weight: float = 0.0      # 0 = draft the median, 1 = draft the 85th pct
     risk_penalty: float = 0.0        # points docked per SD of availability risk
+    downside_weight: float = 0.0     # points docked per point of floor collapse (vor - vor_p15)
     pos_bonus: Dict[str, float] = field(default_factory=dict)
     early_rounds: int = 3
     ev_cap: float = 0.10             # max fraction of best-available VOR surrendered early
@@ -202,6 +203,7 @@ class Strategy:
 
         vor = board["vor"].to_numpy()
         vor_p85 = board["vor_p85"].to_numpy()
+        vor_p15 = board["vor_p15"].to_numpy()
 
         cw = self.ceiling_weight
         if overall in self.swing_picks:
@@ -211,8 +213,11 @@ class Strategy:
         bonus = np.array([self.pos_bonus.get(p, 0.0) for p in pos])
         need = np.array([_need_bonus(p, counts, league, picks_left) for p in pos])
         risk = board["risk_index"].to_numpy() * self.risk_penalty * 10.0
+        # size of the floor collapse, not its level -- vor is already in the
+        # blended term, so this must not double-count it
+        downside = (vor - vor_p15) * self.downside_weight
 
-        score = blended + bonus + need * 0.6 - risk
+        score = blended + bonus + need * 0.6 - risk - downside
 
         # EV sacrifice cap: in the early rounds you may only chase upside among
         # players whose median value is within ev_cap of the best available.
@@ -234,6 +239,10 @@ PRESETS: Dict[str, Strategy] = {
     "balanced":  Strategy("balanced", ceiling_weight=0.25, risk_penalty=0.4, ev_cap=0.08),
     "ceiling":   Strategy("ceiling", ceiling_weight=0.75, risk_penalty=0.0, ev_cap=0.12),
     "max_ceiling": Strategy("max_ceiling", ceiling_weight=1.0, risk_penalty=0.0, ev_cap=0.25),
+    # chase the ceiling, refuse the cliff: same as max_ceiling, but docks
+    # points for a steep floor collapse instead of ignoring it
+    "ceiling_guarded": Strategy("ceiling_guarded", ceiling_weight=1.0, risk_penalty=0.0,
+                                downside_weight=0.35, ev_cap=0.25),
     "safe":      Strategy("safe", ceiling_weight=0.0, risk_penalty=1.2, ev_cap=0.03),
     # a real zero-RB tilt delays running backs, it does not refuse them; a
     # large negative bonus produces a roster that cannot fill its lineup

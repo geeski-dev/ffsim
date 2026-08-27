@@ -111,3 +111,57 @@ for s in ["bpa", "balanced", "ceiling"]:
 hr("7. THE TWO-PART OBJECTIVE")
 print(ff.objective(summary, floor=1050).to_string(index=False))
 print("\n  maximise ceiling_CVaR subject to P10_pts >= floor")
+
+# ------------------------------------------- up/down spread bit-identical
+hr("8. UP/DOWN SPREAD SPLIT -- BIT-IDENTICAL WHEN up_spread == down_spread == proj_spread")
+pool_split = ff.make_pool()  # no up_spread/down_spread column -- both derive from proj_spread
+prepared = ff.prepare(pool_split, lg6)
+
+# recompute the pre-refactor (symmetric) formulas independently, without
+# reusing any of the new up_spread/down_spread machinery
+old_p85 = prepared["proj_points"] * (1 + 1.036 * prepared["proj_spread"])
+old_p15 = prepared["proj_points"] * (1 - 1.036 * prepared["proj_spread"])
+z_spread = (prepared["proj_spread"] - prepared["proj_spread"].mean()) / prepared["proj_spread"].std(ddof=0)
+z_cv = (prepared["weekly_cv"] - prepared["weekly_cv"].mean()) / prepared["weekly_cv"].std(ddof=0)
+up = (prepared["adp"] - prepared["adp_min"]).clip(lower=0)
+z_up = (up - up.mean()) / up.std(ddof=0)
+old_ceiling = (z_cv + z_spread + z_up) / 3.0
+
+p85_ok = np.allclose(prepared["p85_points"], old_p85)
+p15_ok = np.allclose(prepared["p15_points"], old_p15)
+ceil_ok = np.allclose(prepared["ceiling_index"], old_ceiling)
+print(f"  p85_points matches pre-refactor formula   : {'OK' if p85_ok else 'MISMATCH'}")
+print(f"  p15_points matches pre-refactor formula   : {'OK' if p15_ok else 'MISMATCH'}")
+print(f"  ceiling_index matches pre-refactor formula: {'OK' if ceil_ok else 'MISMATCH'}")
+
+board_split = ff.build_board(pool_split, lg6)
+print("  vor/alpha untouched by this refactor (no code path reads up/down_spread):")
+print(f"    vor   sample: {board_split['vor'].iloc[:3].round(2).tolist()}")
+print(f"    alpha sample: {board_split['alpha'].iloc[:3].round(2).tolist()}")
+
+# ------------------------------------------------ downside-weight inversion
+hr("9. DOWNSIDE-WEIGHT INVERSION  (the bug this whole change fixes)")
+print("  Two otherwise-comparable players; player B's raw ceiling (vor_p85) is")
+print("  a hair better than player A's, but B's floor (vor_p15) is much worse.")
+print("  Before this fix, no policy could tell them apart on the downside.\n")
+
+sample = pd.DataFrame({
+    "position":   ["RB", "RB"],
+    "vor":        [100.0, 101.0],
+    "vor_p85":    [140.0, 141.0],   # B nominally better on pure upside
+    "vor_p15":    [95.0, 50.0],     # B has a much steeper floor collapse
+    "risk_index": [0.0, 0.0],       # isolate from availability risk_penalty
+})
+avail = np.array([True, True])
+choose_kwargs = dict(counts={}, league=lg6, picks_left=lg6.rounds, recent=[],
+                     rng=np.random.default_rng(0), overall=1, rnd=1)
+
+pick_max = ff.PRESETS["max_ceiling"].choose(sample, avail, **choose_kwargs)
+pick_guarded = ff.PRESETS["ceiling_guarded"].choose(sample, avail, **choose_kwargs)
+
+max_ok = pick_max == 1
+guarded_ok = pick_guarded == 0
+print(f"  max_ceiling     (downside_weight=0.00) picks player {'AB'[pick_max]}"
+      f"   {'OK -- unchanged, still chases raw ceiling' if max_ok else 'MISMATCH'}")
+print(f"  ceiling_guarded (downside_weight=0.35) picks player {'AB'[pick_guarded]}"
+      f"   {'OK -- refuses the cliff' if guarded_ok else 'MISMATCH'}")

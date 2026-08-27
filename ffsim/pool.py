@@ -29,12 +29,31 @@ RISK = [
     "miss_rate",       # 3-yr games-missed rate, 0-1
     "weekly_cv",       # coefficient of variation of weekly points
     "proj_spread",     # cross-source projection disagreement, as a fraction
+    "up_spread",       # upside dispersion; defaults to proj_spread if absent
+    "down_spread",     # downside dispersion; defaults to proj_spread if absent
 ]
 
 REQUIRED = IDENTITY + STATS + MARKET + RISK
 
 
+def _derive_spreads(df: pd.DataFrame) -> pd.DataFrame:
+    """Fill up_spread/down_spread from proj_spread where a pool doesn't have them.
+
+    up_spread and down_spread are new and not yet present in every built pool
+    or CSV on disk (and not produced by the synthetic pool at all), so they
+    are not hard-required -- every existing pool keeps loading, symmetric.
+    """
+    if "proj_spread" not in df.columns:
+        return df
+    if "up_spread" not in df.columns:
+        df = df.assign(up_spread=df["proj_spread"])
+    if "down_spread" not in df.columns:
+        df = df.assign(down_spread=df["proj_spread"])
+    return df
+
+
 def validate(df: pd.DataFrame) -> pd.DataFrame:
+    df = _derive_spreads(df)
     missing = [c for c in REQUIRED if c not in df.columns]
     if missing:
         raise ValueError(f"pool is missing required columns: {missing}")
@@ -53,21 +72,23 @@ def load_csv(path: str) -> pd.DataFrame:
 
 def prepare(df: pd.DataFrame, league: League, te_premium: float = 0.0) -> pd.DataFrame:
     """Attach scoring-dependent columns for a specific league."""
-    out = df.copy().reset_index(drop=True)
+    out = _derive_spreads(df.copy().reset_index(drop=True))
     out["proj_points"] = score_frame(out, league.scoring, te_premium)
     out["proj_ppg"] = out["proj_points"] / out["proj_games"].clip(lower=1)
 
     # Ceiling proxy: how good the good outcome is. Built from the two sources
     # of upside we can measure -- week-to-week volatility and how far apart the
-    # projection sources are.
+    # projection sources are. Upside only -- down_spread has no business
+    # making a player look like a better bet.
     z_cv = _z(out["weekly_cv"])
-    z_spread = _z(out["proj_spread"])
+    z_up = _z(out["up_spread"])
     z_upside = _z((out["adp"] - out["adp_min"]).clip(lower=0))
-    out["ceiling_index"] = (z_cv + z_spread + z_upside) / 3.0
+    out["ceiling_index"] = (z_cv + z_up + z_upside) / 3.0
 
-    # 85th-percentile season, as a multiple of the median projection
-    out["p85_points"] = out["proj_points"] * (1 + 1.036 * out["proj_spread"])
-    out["p15_points"] = out["proj_points"] * (1 - 1.036 * out["proj_spread"])
+    # 85th/15th-percentile season, driven by the matching tail's own spread --
+    # these are no longer mirror images of each other.
+    out["p85_points"] = out["proj_points"] * (1 + 1.036 * out["up_spread"])
+    out["p15_points"] = out["proj_points"] * (1 - 1.036 * out["down_spread"])
 
     out["risk_index"] = _z(out["miss_rate"])
     return out

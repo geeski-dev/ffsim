@@ -57,7 +57,8 @@ STATS = ["pass_yds", "pass_td", "interceptions", "rush_yds", "rush_td",
 
 REQUIRED_OUT = (["player_id", "name", "position", "team", "bye_week"] + STATS +
                 ["adp", "adp_sd", "adp_min", "adp_max", "adp_is_estimated",
-                 "proj_games", "miss_rate", "weekly_cv", "proj_spread"])
+                 "proj_games", "miss_rate", "weekly_cv", "proj_spread",
+                 "up_spread", "down_spread"])
 
 warnings: list[str] = []
 
@@ -106,6 +107,27 @@ def norm_id(raw) -> str:
     return f"{slug}-{pos}" if pos else slug
 
 
+def slug_from_name(name, pos) -> str:
+    """Derive a canonical slug from a source-published name and position.
+
+    Some packages ship their own IDs that were never meant to match ours, so
+    the raw name is the only usable key. Strip punctuation, hyphenate, append
+    the position, then run it through the same normaliser everything else uses.
+    """
+    import re
+    n = re.sub(r"[^a-z ]", "", str(name).lower()).strip()
+    n = "-".join(n.split())
+    return norm_id(f"{n}-{str(pos).strip().lower()}")
+
+
+def load_all(directory: str, stems) -> pd.DataFrame | None:
+    """Concatenate every matching file — used where one feed spans several."""
+    frames = [f for f in (load(directory, st) for st in stems) if f is not None]
+    if not frames:
+        return None
+    return pd.concat(frames, ignore_index=True, sort=False)
+
+
 def load(directory: str, stem: str) -> pd.DataFrame | None:
     hits = glob.glob(os.path.join(directory, "**", f"*{stem}*.csv"), recursive=True)
     hits = [h for h in hits if "_sources" not in h and "_GAPS" not in h.upper()]
@@ -136,20 +158,32 @@ def build(directory: str, scoring: str) -> pd.DataFrame:
     if players is None:
         sys.exit("FATAL: no 01_PLAYERS csv found")
     out = pd.DataFrame()
+    dy = find(players, "draft_year") or ("draft_year" if "draft_year" in players.columns else None)
     for c in ["player_id", "name", "position", "team", "bye_week"]:
         col = find(players, c)
         if col is None:
             if c == "bye_week":
-                warn("bye_week not found — byes disabled (set to 0)")
-                out[c] = 0
+                out[c] = np.nan
                 continue
             sys.exit(f"FATAL: 01_PLAYERS has no column for '{c}'")
         out[c] = players[col]
+    out["is_rookie"] = (players[dy] == 2026).fillna(False).values if dy else False
     out = out[out["position"].isin(["QB", "RB", "WR", "TE"])].copy()
     out["player_id"] = out["player_id"].map(norm_id)
     dupes = out["player_id"].duplicated().sum()
     if dupes:
         warn(f"{dupes} duplicate player_id after normalisation — check for collisions")
+    if out["bye_week"].isna().all():
+        byes = load(directory, "SCHEDULE_01")
+        bt, bw = (find(byes, "team"), find(byes, "bye_week")) if byes is not None else (None, None)
+        if bt and bw:
+            mp = dict(zip(byes[bt].astype(str).str.upper(), byes[bw]))
+            out["bye_week"] = out["team"].astype(str).str.upper().map(mp)
+            n_ok = out["bye_week"].notna().sum()
+            print(f"  bye weeks: joined {n_ok}/{len(out)} from SCHEDULE_01")
+        else:
+            warn("bye_week unavailable — byes disabled (set to 0)")
+    out["bye_week"] = out["bye_week"].fillna(0).astype(int)
     print(f"  identity: {len(out)} skill players")
 
     # ---- projections: median across sources, spread across sources -----
@@ -158,6 +192,22 @@ def build(directory: str, scoring: str) -> pd.DataFrame:
         sys.exit("FATAL: no 04_PROJECTIONS csv found")
     pid = find(proj, "player_id")
     proj[pid] = proj[pid].map(norm_id)
+
+    extra = load(directory, "PROJ_02")
+    if extra is not None:
+        en, ep = find(extra, "name"), find(extra, "position")
+        if en is None and "source_player_name" in extra.columns:
+            en = "source_player_name"
+        if ep is None and "source_position" in extra.columns:
+            ep = "source_position"
+        if en and ep:
+            extra = extra.copy()
+            extra[pid] = [slug_from_name(n, p) for n, p in zip(extra[en], extra[ep])]
+            hit = extra[pid].isin(set(proj[pid])).sum()
+            print(f"  extra projections: {len(extra)} rows, {hit} match an existing player")
+            proj = pd.concat([proj, extra], ignore_index=True, sort=False)
+        else:
+            warn("PROJ_02 present but has no usable name/position columns")
 
     stat_cols = {}
     for s in STATS + ["proj_games"]:
@@ -193,17 +243,36 @@ def build(directory: str, scoring: str) -> pd.DataFrame:
                + proj.get(find(proj, "rush_td"), 0) * 6)
         g = pd.DataFrame({"pid": proj[pid], "tot": tot}).groupby("pid")["tot"]
         spread = (g.std() / g.mean().replace(0, np.nan)).clip(0.04, 0.55)
+        # fewer than 3 independent sources cannot produce a credible dispersion
+        spread = spread.where(n_src >= 3)
         out = out.merge(spread.rename("proj_spread"),
                         left_on="player_id", right_index=True, how="left")
     if "proj_spread" not in out.columns:
         out["proj_spread"] = np.nan
     miss = out["proj_spread"].isna().sum()
-    out["proj_spread"] = out["proj_spread"].fillna(0.22)
+    # measured: rookie RBs carry ~3x the cross-source dispersion of veterans
+    # (0.292 vs 0.095). 0.22 for veterans is deliberate ignorance, not a
+    # measurement -- source agreement is a floor on true uncertainty, since
+    # sources can be wrong together.
+    rookie_default, vet_default = 0.29, 0.22
+    out["proj_spread"] = out["proj_spread"].fillna(
+        pd.Series(np.where(out["is_rookie"], rookie_default, vet_default),
+                  index=out.index))
     if miss:
-        warn(f"proj_spread defaulted to 0.22 for {miss} players")
+        n_rk = int((out["is_rookie"] & out["proj_spread"].eq(rookie_default)).sum())
+        warn(f"proj_spread defaulted for {miss} players "
+             f"({n_rk} rookies at {rookie_default}, rest at {vet_default})")
+
+    # up_spread/down_spread: distinct upside/downside dispersion. Not yet
+    # measured separately -- both default to proj_spread so today's p85/p15/
+    # ceiling numbers are reproduced exactly. Age-based downside values are a
+    # separate change (Change Ledger CL-003), landed only after this
+    # mechanism is verified.
+    out["up_spread"] = out["proj_spread"]
+    out["down_spread"] = out["proj_spread"]
 
     # ---- ADP: prefer the live market snapshot, which has real ranges ---
-    market = load(directory, "MARKET_01")
+    market = load_all(directory, ["MARKET_01", "MARKET_04"])
     adp_src = None
     if market is not None:
         m = market.copy()
@@ -217,27 +286,51 @@ def build(directory: str, scoring: str) -> pd.DataFrame:
             m = m[m[fmt_s].astype(str).str.contains("half", case=False, na=False)]
         if len(m):
             adp_src = m
-            print(f"  ADP: MARKET_01 live snapshot, {len(m)} rows "
-                  f"(10-team {scoring})")
+            srcs = sorted(m[find(m, "source")].dropna().unique()) if find(m, "source") else []
+            print(f"  ADP: live market snapshot, {len(m)} rows (10-team {scoring})"
+                  + (f" from {', '.join(map(str, srcs))}" if srcs else ""))
     if adp_src is None:
         adp_src = load(directory, "02_ADP")
-        warn("MARKET_01 unusable for this scoring — falling back to 02_ADP "
+        warn("no live market rows for this scoring — falling back to 02_ADP "
              "(ranges will be sparse)")
     if adp_src is None:
         sys.exit("FATAL: no ADP source found")
 
+    # Every feed invents its own identifier. FFC ships ids like
+    # "ffc-5672-10-ppr" that match nothing we have. The published name is the
+    # only field all sources agree on, so build a key both ways and keep
+    # whichever one actually lands on the pool.
+    adp_src = adp_src.copy()
+    known = set(out["player_id"])
     apid = find(adp_src, "player_id")
-    adp_src[apid] = adp_src[apid].map(norm_id)
+    by_id = adp_src[apid].map(norm_id) if apid else pd.Series(index=adp_src.index, dtype=object)
+
+    an = ("source_player_name" if "source_player_name" in adp_src.columns
+          else find(adp_src, "name"))
+    ap = ("source_position" if "source_position" in adp_src.columns
+          else find(adp_src, "position"))
+    if an and ap:
+        by_name = pd.Series([slug_from_name(n, q)
+                             for n, q in zip(adp_src[an], adp_src[ap])],
+                            index=adp_src.index)
+        if by_name.isin(known).sum() > by_id.isin(known).sum():
+            by_id = by_name
+
+    adp_src["_key"] = by_id
     agg = {}
     for c in ["adp", "adp_sd", "adp_min", "adp_max"]:
         col = find(adp_src, c)
         if col is not None:
-            agg[c] = adp_src.groupby(apid)[col].median()
+            agg[c] = adp_src.groupby("_key")[col].median()
     adp_df = pd.DataFrame(agg)
     out = out.merge(adp_df, left_on="player_id", right_index=True, how="left")
 
     matched = out["adp"].notna().sum() if "adp" in out.columns else 0
     print(f"  ADP matched: {matched}/{len(out)} players")
+    if matched < len(out) * 0.25:
+        warn("ADP join is failing — sample keys from each side")
+        print(f"    adp keys : {list(adp_src['_key'].head(5))}")
+        print(f"    pool keys: {list(out['player_id'].head(5))}")
     if "adp" not in out.columns:
         sys.exit("FATAL: ADP source has no usable adp column")
     # flag fabricated ADP so nothing downstream mistakes it for a real price

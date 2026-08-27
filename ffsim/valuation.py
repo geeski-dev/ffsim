@@ -117,6 +117,7 @@ def add_valuation(df: pd.DataFrame, league: League) -> pd.DataFrame:
     out["replacement"] = out["position"].map(repl).astype(float)
     out["vor"] = out["proj_points"] - out["replacement"]
     out["vor_p85"] = out["p85_points"] - out["replacement"]
+    out["vor_p15"] = out["p15_points"] - out["replacement"]
 
     # value below replacement is zero, not negative -- you would simply start
     # the replacement player. Leaving it negative lets pool depth at one
