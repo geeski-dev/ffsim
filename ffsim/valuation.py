@@ -97,7 +97,7 @@ def _pava_decreasing(y: np.ndarray) -> np.ndarray:
     return out
 
 
-def market_curve(df: pd.DataFrame, points_col: str = "proj_points") -> pd.Series:
+def market_curve(df: pd.DataFrame, points_col: str = "vor") -> pd.Series:
     """Market-implied points at each player's ADP.
 
     An isotonic (monotone decreasing) fit of consensus points on ADP. The gap
@@ -118,8 +118,9 @@ def add_valuation(df: pd.DataFrame, league: League) -> pd.DataFrame:
     out["vor"] = out["proj_points"] - out["replacement"]
     out["vor_p85"] = out["p85_points"] - out["replacement"]
 
-    out["market_implied_points"] = market_curve(out)
-    out["alpha"] = out["proj_points"] - out["market_implied_points"]
+    out["market_implied_vor"] = market_curve(out, "vor")
+    out["alpha"] = out["vor"] - out["market_implied_vor"]
+    out["market_implied_points"] = out["market_implied_vor"] + out["replacement"]
 
     out["tier"] = 0
     for pos, g in out.groupby("position"):
