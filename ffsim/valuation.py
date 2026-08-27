@@ -118,14 +118,19 @@ def add_valuation(df: pd.DataFrame, league: League) -> pd.DataFrame:
     out["vor"] = out["proj_points"] - out["replacement"]
     out["vor_p85"] = out["p85_points"] - out["replacement"]
 
+    # value below replacement is zero, not negative -- you would simply start
+    # the replacement player. Leaving it negative lets pool depth at one
+    # position distort alpha at every other position.
+    out["vor_surplus"] = out["vor"].clip(lower=0.0)
+
     if "adp_is_estimated" in out.columns:
         priced = ~out["adp_is_estimated"].fillna(False).astype(bool)
     else:
         priced = pd.Series(True, index=out.index)
     out["market_implied_vor"] = np.nan
     if priced.any():
-        out.loc[priced, "market_implied_vor"] = market_curve(out.loc[priced], "vor")
-    out["alpha"] = out["vor"] - out["market_implied_vor"]
+        out.loc[priced, "market_implied_vor"] = market_curve(out.loc[priced], "vor_surplus")
+    out["alpha"] = out["vor_surplus"] - out["market_implied_vor"]
     out["market_implied_points"] = out["market_implied_vor"] + out["replacement"]
 
     out["tier"] = 0
