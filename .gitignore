@@ -7,3 +7,12 @@ dist/
 .env
 
 .playwright-mcp/
+
+data/raw/
+my_leagues.py
+.venv/
+__pycache__/
+*.pyc
+
+.DS_Store
+.env*.local

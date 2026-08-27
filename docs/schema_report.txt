@@ -1,0 +1,143 @@
+47 CSVs in data/raw
+
+01_PLAYERS.csv                                           313 rows
+    player_id, full_name, first_name, last_name, team, position, depth_chart_rank, age_on_2026_09_01, birthdate, height_in, weight_lb, years_exp, draft_year, draft_round, draft_pick_overall, college, roster_status, notes
+
+01_PLAYERS_sources.csv                                     3 rows
+    source_name, source_url, date_accessed, tabs_populated, paywalled, reliability_note
+
+02_ADP.csv                                             4,115 rows
+    player_id, source, format_scoring, format_teams, format_type, adp_overall, adp_position, adp_min_pick, adp_max_pick, adp_stdev, sample_size, date_pulled, source_url
+
+02_ADP_sources.csv                                        11 rows
+    source_name, source_url, date_accessed, tabs_populated, paywalled, reliability_note
+
+03_RANKINGS.csv                                        3,926 rows
+    player_id, source, ranker_name, format_scoring, format_teams, rank_overall, rank_position, tier, date_published, source_url
+
+03_RANKINGS_sources.csv                                   13 rows
+    source_name, source_url, date_accessed, tabs_populated, paywalled, reliability_note
+
+04_PROJECTIONS.csv                                       939 rows
+    player_id, source, format_scoring, proj_games, proj_pass_att, proj_pass_yds, proj_pass_td, proj_int, proj_rush_att, proj_rush_yds, proj_rush_td, proj_targets, proj_rec, proj_rec_yds, proj_rec_td, proj_fumbles_lost, proj_two_pt, proj_half_ppr_points, date_published, source_url
+
+04_PROJECTIONS_sources.csv                                29 rows
+    source_name, source_url, date_accessed, tabs_populated, paywalled, reliability_note
+
+05_USAGE_HISTORY.csv                                     576 rows
+    player_id, season, team, games_played, games_started, snap_pct, route_pct, targets, target_share, targets_per_route_run, air_yards, air_yards_share, adot, wopr, rz_targets, rz_touches, carries, carry_share, goalline_carries, receptions, rec_yds, rush_yds, total_td, yards_per_touch, half_ppr_points, half_ppr_ppg, position_finish, source_url
+
+05_USAGE_HISTORY_sources.csv                               3 rows
+    source_name, source_url, date_accessed, tabs_populated, paywalled, reliability_note
+
+06_WEEKLY_CONSISTENCY.csv                                576 rows
+    player_id, season, games_played, weeks_pos_top5, weeks_pos_top12, weeks_pos_top24, weeks_under_5_pts, ppg_mean, ppg_median, ppg_stdev, best_week_pts, worst_week_pts, source_url
+
+06_WEEKLY_CONSISTENCY_sources.csv                          2 rows
+    source_name, source_url, date_accessed, tabs_populated, paywalled, reliability_note
+
+07_TEAM_CONTEXT.csv                                       32 rows
+    team, vegas_win_total_2026, vegas_win_total_odds, implied_points_per_game_2026, head_coach, offensive_coordinator, oc_is_new, qb1, qb1_is_new, plays_per_game_2025, pass_rate_2025, proe_2025, pace_sec_per_play_2025, proj_pass_rate_2026, ol_rank_pass_block, ol_rank_run_block, ol_rank_source, notes, source_url
+
+07_TEAM_CONTEXT_sources.csv                               16 rows
+    source_name, source_url, date_accessed, tabs_populated, paywalled, reliability_note
+
+08_VACATED_VOLUME.csv                                     32 rows
+    team, vacated_targets, vacated_target_share, vacated_rec_yds, vacated_air_yards, vacated_carries, vacated_carry_share, vacated_rz_targets, vacated_goalline_carries, departed_players, arrived_players, source_url
+
+08_VACATED_VOLUME_sources.csv                              3 rows
+    source_name, source_url, date_accessed, tabs_populated, paywalled, reliability_note
+
+09_DEPTH_CHART.csv                                       303 rows
+    team, position, depth_rank, player_id, projected_role, competition_notes, source_url
+
+09_DEPTH_CHART_sources.csv                                 1 rows
+    source_name, source_url, date_accessed, tabs_populated, paywalled, reliability_note
+
+10_RISK_INJURY_AGE.csv                                   313 rows
+    player_id, games_missed_2023, games_missed_2024, games_missed_2025, games_missed_3yr_total, injury_history_summary, current_injury_status, current_injury_description, expected_return_week, age_on_2026_09_01, career_touches_through_2025, suspension_games_2026, holdout_status, source_url
+
+10_RISK_INJURY_AGE_sources.csv                             6 rows
+    source_name, source_url, date_accessed, tabs_populated, paywalled, reliability_note
+
+11_SCHEDULE_SOS.csv                                       32 rows
+    team, bye_week, sos_rank_overall, sos_rank_vs_qb, sos_rank_vs_rb, sos_rank_vs_wr, sos_rank_vs_te, playoff_sos_rank_w15_w17, sos_source, source_url
+
+11_SCHEDULE_SOS_sources.csv                                1 rows
+    source_name, source_url, date_accessed, tabs_populated, paywalled, reliability_note
+
+12_SCHEDULE_GRID.csv                                     576 rows
+    team, week, opponent, home_away, is_bye
+
+12_SCHEDULE_GRID_sources.csv                               2 rows
+    source_name, source_url, date_accessed, tabs_populated, paywalled, reliability_note
+
+13_ROOKIES.csv                                            80 rows
+    player_id, team, position, draft_round, draft_pick_overall, college, final_college_season, college_games, college_receptions, college_rec_yds, college_rush_att, college_rush_yds, college_total_td, dominator_rating, breakout_age, yards_per_route_run_college, forty_time, ras_score, landing_spot_notes, source_url
+
+13_ROOKIES_sources.csv                                     1 rows
+    source_name, source_url, date_accessed, tabs_populated, paywalled, reliability_note
+
+14_PICK_MAP.csv                                          160 rows
+    draft_slot, round, overall_pick
+
+CORE_COLLECTION_2026/CORE_01_PLAYER_ID_CROSSWALK.csv     466 rows
+    player_id, position, full_name, appears_in_tabs, match_method, matched_normalized_id, team_current, roster_status, gsis_id, sleeper_id, pfr_id, espn_id, yahoo_id, rotowire_id, sportradar_id, source_url, date_accessed
+
+CORE_COLLECTION_2026/CORE_02_ID_CROSSWALK_GAPS.csv         5 rows
+    dataset, player_id, field, reason, suggested_source, date_logged
+
+CORE_COLLECTION_2026/CORE_03_ID_CROSSWALK_SOURCES.csv       2 rows
+    source_name, source_url, date_accessed, dataset, reliability_note
+
+CORE_COLLECTION_2026/ROOKIE_01_NFL_PROFILE_MEASUREMENTS.csv      75 rows
+    player_id, official_player_name, position, college, draft_pick_overall, height_in, weight_lb, arm_length_in, hand_size_in, wingspan_in, forty_yard_seconds, forty_yard_designation, pro_day_forty_seconds, pro_day_forty_designation, ten_yard_split_seconds, ten_yard_split_designation, vertical_jump_in, vertical_jump_designation, broad_jump_in, broad_jump_designation, three_cone_seconds, three_cone_designation, twenty_yard_shuttle_seconds, twenty_yard_shuttle_designation, bench_press_reps, bench_press_designation, nfl_athleticism_score, nfl_production_score, nfl_draft_grade, nfl_profile_bio_html, source_url, date_accessed
+
+CORE_COLLECTION_2026/ROOKIE_02_NFL_PROFILE_MEASUREMENT_GAPS.csv       5 rows
+    dataset, player_id, field, reason, date_logged
+
+CORE_COLLECTION_2026/ROOKIE_03_NFL_PROFILE_MEASUREMENT_SOURCES.csv       1 rows
+    source_name, source_url, date_accessed, dataset, reliability_note
+
+K_DST_Collection_2026/K_DST_00_README.csv                  7 rows
+    field, value
+
+K_DST_Collection_2026/K_DST_01_ENTITIES.csv              103 rows
+    entity_id, entity_type, display_name, team, entity_status, gsis_id, espn_id, sleeper_id, pfr_id
+
+K_DST_Collection_2026/K_DST_02_ADP.csv                   477 rows
+    entity_id, entity_type, source_entity_id, source, format_scoring, format_teams, format_type, adp_overall, adp_position, adp_min_pick, adp_max_pick, adp_stdev, sample_size, date_pulled, source_url
+
+K_DST_Collection_2026/K_DST_03_RANKINGS.csv              278 rows
+    entity_id, entity_type, source_entity_id, source, ranker_name, format_scoring, format_teams, rank_overall, rank_position, tier, date_published, source_url
+
+K_DST_Collection_2026/K_DST_04_PROJECTIONS.csv         1,258 rows
+    entity_id, entity_type, team, source, projection_season, scoring_label, source_rank, metric, value, source_entity_name, source_url, date_accessed
+
+K_DST_Collection_2026/K_DST_05_K_HISTORY_SEASON.csv      124 rows
+    entity_id, entity_type, season, team, player_name, source, source_url, date_accessed, games, fg_made, fg_att, fg_missed, fg_blocked, fg_long, fg_pct, fg_made_0_19, fg_made_20_29, fg_made_30_39, fg_made_40_49, fg_made_50_59, fg_made_60_, pat_made, pat_att, pat_missed, pat_blocked, pat_pct, fantasy_points, fantasy_points_ppr
+
+K_DST_Collection_2026/K_DST_06_K_HISTORY_WEEKLY.csv    1,629 rows
+    entity_id, entity_type, season, week, team, opponent_team, player_name, source, source_url, date_accessed, fg_made, fg_att, fg_missed, fg_blocked, fg_long, fg_pct, fg_made_0_19, fg_made_20_29, fg_made_30_39, fg_made_40_49, fg_made_50_59, fg_made_60_, pat_made, pat_att, pat_missed, pat_blocked, pat_pct, fantasy_points, fantasy_points_ppr
+
+K_DST_Collection_2026/K_DST_07_DST_HISTORY_SEASON.csv      96 rows
+    entity_id, entity_type, season, team, source, source_entity_name, source_url, date_accessed, int_interceptions, sfty_safeties, sck_sacks, tk_tackles, frec_defensive_fumbles_recovered, fum_forced_fumbles, dtd_defensive_touchdowns, pts_points_allowed, ppg_points_allowed_per_game, yards_allowed_pass_net_passing_yards_allowed, yards_allowed_rush_rushing_yards_allowed, yards_allowed_total_total_yards_allowed, yards_allowed_avg_yards_against_per_game, fpts_fantasy_points, fppg_fantasy_points_per_game
+
+K_DST_Collection_2026/K_DST_08_CURRENT_STATUS.csv         75 rows
+    entity_id, entity_type, team, status_type, is_primary_kicker, depth_order, source_value, source, source_url, date_accessed
+
+K_DST_Collection_2026/K_DST_08_SOURCE_LOG.csv             11 rows
+    dataset, source, source_url, date_accessed, notes
+
+K_DST_Collection_2026/K_DST_09_GAPS.csv                    1 rows
+    dataset, entity_id, field, reason, source_url, date_logged
+
+MARKET_COLLECTION_2026/MARKET_01_LIVE_ADP_SNAPSHOT.csv     456 rows
+    player_id, source_player_name, source_position, source_team, source_platform_player_id, source, format_scoring, format_teams, format_type, adp_overall, adp_round_pick, adp_position, adp_min_pick, adp_max_pick, adp_stdev, sample_size, source_total_drafts, source_window_start, source_window_end, date_accessed, source_url
+
+MARKET_COLLECTION_2026/MARKET_02_LIVE_ADP_SOURCES.csv       2 rows
+    source_name, source_url, date_accessed, dataset, format, source_window_start, source_window_end, sample_description, paywalled
+
+MARKET_COLLECTION_2026/MARKET_03_LIVE_ADP_GAPS.csv         2 rows
+    dataset, source, field, reason, suggested_source, date_logged
+
