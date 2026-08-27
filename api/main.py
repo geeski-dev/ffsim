@@ -7,6 +7,7 @@ Two endpoints with very different cost profiles:
 The player pool is deterministic (make_pool() is seeded), so it is built once
 at import time and reused across every request.
 """
+import math
 import sys
 from pathlib import Path
 
@@ -83,7 +84,7 @@ def api_league(settings: LeagueSettingsRequest) -> LeagueResponse:
             team=row.team,
             adp=round(row.adp, 1),
             vor=round(row.vor, 1),
-            alpha=round(row.alpha, 1),
+            alpha=None if math.isnan(row.alpha) else round(row.alpha, 1),
             tier=int(row.tier),
         )
         for row in top.itertuples()

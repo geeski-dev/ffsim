@@ -47,7 +47,7 @@ class PlayerRow(BaseModel):
     team: str
     adp: float
     vor: float
-    alpha: float
+    alpha: Optional[float] = None
     tier: int
 
 

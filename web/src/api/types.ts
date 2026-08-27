@@ -38,7 +38,7 @@ export interface PlayerRow {
   team: string;
   adp: number;
   vor: number;
-  alpha: number;
+  alpha: number | null;
   tier: number;
 }
 

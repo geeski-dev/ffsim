@@ -29,6 +29,9 @@ export default function PlayerBoard({ players }: Props) {
     return [...filtered].sort((a, b) => {
       const av = a[sortKey];
       const bv = b[sortKey];
+      if (av === null && bv === null) return 0;
+      if (av === null) return 1;
+      if (bv === null) return -1;
       const cmp = typeof av === 'string' ? av.localeCompare(bv as string) : (av as number) - (bv as number);
       return sortDir === 'asc' ? cmp : -cmp;
     });
@@ -71,7 +74,9 @@ export default function PlayerBoard({ players }: Props) {
               <td>{p.team}</td>
               <td>{p.adp.toFixed(1)}</td>
               <td>{p.vor.toFixed(1)}</td>
-              <td className={p.alpha >= 0 ? 'alpha-positive' : 'alpha-negative'}>{p.alpha.toFixed(1)}</td>
+              <td className={p.alpha === null ? '' : p.alpha >= 0 ? 'alpha-positive' : 'alpha-negative'}>
+                {p.alpha === null ? '—' : p.alpha.toFixed(1)}
+              </td>
               <td>{p.tier}</td>
             </tr>
           ))}
