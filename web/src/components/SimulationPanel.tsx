@@ -59,34 +59,36 @@ export default function SimulationPanel({ settings }: Props) {
       {error && <div className="error">Simulation failed: {error}</div>}
       {results && (
         <>
-          <table>
-            <thead>
-              <tr>
-                <th>Strategy</th>
-                <th>Champ %</th>
-                <th>Playoff %</th>
-                <th>Mean pts</th>
-                <th>P10 pts</th>
-                <th>P85 pts</th>
-                <th>Ceiling CVaR</th>
-                <th>Mean wins</th>
-              </tr>
-            </thead>
-            <tbody>
-              {results.map((r) => (
-                <tr key={r.strategy}>
-                  <td>{r.strategy}</td>
-                  <td>{r.champ_pct.toFixed(2)}</td>
-                  <td>{r.playoff_pct.toFixed(1)}</td>
-                  <td>{r.mean_pts.toFixed(1)}</td>
-                  <td>{r.p10_pts.toFixed(1)}</td>
-                  <td>{r.p85_pts.toFixed(1)}</td>
-                  <td>{r.ceiling_cvar.toFixed(1)}</td>
-                  <td>{r.mean_wins.toFixed(2)}</td>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Strategy</th>
+                  <th>Champ %</th>
+                  <th>Playoff %</th>
+                  <th>Mean pts</th>
+                  <th>P10 pts</th>
+                  <th>P85 pts</th>
+                  <th>Ceiling CVaR</th>
+                  <th>Mean wins</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {results.map((r) => (
+                  <tr key={r.strategy}>
+                    <td>{r.strategy}</td>
+                    <td>{r.champ_pct.toFixed(2)}</td>
+                    <td>{r.playoff_pct.toFixed(1)}</td>
+                    <td>{r.mean_pts.toFixed(1)}</td>
+                    <td>{r.p10_pts.toFixed(1)}</td>
+                    <td>{r.p85_pts.toFixed(1)}</td>
+                    <td>{r.ceiling_cvar.toFixed(1)}</td>
+                    <td>{r.mean_wins.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           <p className="noise-note">
             Differences under a few percentage points are noise below ~1000 sims.
           </p>
