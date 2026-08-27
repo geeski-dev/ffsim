@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { LeagueSettings, LeagueResponse } from './api/types';
 import { fetchLeague } from './api/client';
+import logo from './assets/logo.png';
 import SettingsPanel from './components/SettingsPanel';
 import DraftPosition from './components/DraftPosition';
 import ScarcityTable from './components/ScarcityTable';
@@ -16,6 +17,7 @@ const DEFAULT_SETTINGS: LeagueSettings = {
   lineup: { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1 },
   playoff_teams: 4,
   reserved_slots: 2,
+  risk_profile: 'balanced',
 };
 
 const DEBOUNCE_MS = 300;
@@ -49,14 +51,28 @@ export default function App() {
 
   return (
     <div className="app">
-      <h1>ffsim</h1>
+      <div className="app-header">
+        <img src={logo} alt="Mispricing Engine logo" />
+        <h1>Mispricing Engine</h1>
+      </div>
+      <p className="tagline">Find the mispriced players, not the good ones.</p>
+      <p className="intro">
+        Most draft tools rank players. This one prices them. <strong>Value</strong> is how many points a
+        player scores above a freely-available replacement at his position; <strong>Bargain</strong> is how
+        much cheaper he is than that value deserves.
+      </p>
       <div className="columns">
         <div className="column-left">
           <SettingsPanel settings={settings} onChange={setSettings} />
         </div>
         <div className="column-right">
           {error && <div className="error">Could not reach the API: {error}</div>}
-          {!error && !league && <div className="loading">Loading...</div>}
+          {!error && !league && (
+            <div className="loading">
+              <span className="spinner" />
+              Loading...
+            </div>
+          )}
           {!error && league && (
             <>
               <DraftPosition
@@ -67,7 +83,7 @@ export default function App() {
                 totalRounds={league.total_rounds}
               />
               <ScarcityTable rows={league.scarcity} />
-              <PlayerBoard players={league.players} />
+              <PlayerBoard players={league.players} riskProfile={settings.risk_profile} />
             </>
           )}
         </div>
