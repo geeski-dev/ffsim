@@ -1,18 +1,74 @@
+.root { min-height: 100dvh; }
 .app { max-width: 1400px; margin: 0 auto; padding: 24px; text-align: left; }
 
-.app-header { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+.banner-shell { width: 100%; container-type: inline-size; }
+.draft-banner {
+  position: relative; width: 100%; height: clamp(220px, 25dvh, 320px); min-height: 220px;
+  overflow: hidden; isolation: isolate;
+  background:
+    linear-gradient(90deg, #070d09 0%, rgba(7, 13, 9, 0.96) 21%, rgba(4, 15, 9, 0.72) 51%, rgba(2, 15, 8, 0.22) 100%),
+    radial-gradient(circle at 78% 45%, #06361e, #07100b 54%, #050906 100%);
+}
+.draft-banner--collapsed { height: clamp(132px, 17dvh, 200px); min-height: 132px; }
+.draft-banner--animatable {
+  transition: height 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.draft-banner__mesh {
+  position: absolute; inset: -14% -4% -12% 10%;
+  width: 98%; height: 126%; z-index: -2; opacity: 0.94;
+}
+.draft-banner__glow {
+  position: absolute; top: 8%; left: 42%; width: 48%; height: 80%;
+  z-index: -1; border-radius: 50%; background: rgba(0, 255, 119, 0.07); filter: blur(58px);
+}
+.draft-banner__speed {
+  position: absolute; inset: 0 0 0 45%; z-index: -1; opacity: 0.12;
+  transform: skew(-28deg);
+  background: repeating-linear-gradient(90deg,
+    transparent 0, transparent 44px, #29ff8f 45px, #29ff8f 46px, transparent 47px, transparent 88px);
+  mask-image: linear-gradient(90deg, transparent, #000 35%, transparent 95%);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 35%, transparent 95%);
+}
+.draft-banner__logo {
+  position: absolute; z-index: 2;
+  top: clamp(22px, 3.4cqw, 42px); left: clamp(20px, 3.8cqw, 56px);
+  width: clamp(205px, 24cqw, 330px); height: auto;
+  filter: drop-shadow(0 10px 24px rgba(0, 255, 119, 0.09));
+}
+.draft-banner--collapsed .draft-banner__logo {
+  top: clamp(14px, 2.2cqw, 24px);
+  width: clamp(150px, 16cqw, 220px);
+}
+.draft-banner--animatable .draft-banner__logo {
+  transition:
+    top 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    width 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.draft-banner__edge {
+  position: absolute; inset: auto 0 0; height: 2px;
+  background: linear-gradient(90deg, transparent 4%, #18ef7d 28%, rgba(24, 239, 125, 0.12) 72%, transparent 98%);
+  box-shadow: 0 0 16px rgba(24, 239, 125, 0.26);
+}
+@container (width <= 700px) {
+  .draft-banner { height: 220px; }
+  .draft-banner--collapsed { height: clamp(132px, 17dvh, 200px); }
+  .draft-banner__mesh { width: 130%; left: 18%; }
+  .draft-banner__logo { width: 205px; }
+  .draft-banner--collapsed .draft-banner__logo { width: 150px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .draft-banner--animatable,
+  .draft-banner--animatable .draft-banner__logo {
+    transition: none;
+  }
+}
+
 .mode-toggle { margin-left: auto; display: flex; gap: 4px; }
 .mode-toggle button {
   padding: 6px 14px; border: 1px solid var(--rule); background: var(--surface-alt);
   color: var(--ink); border-radius: 4px; cursor: pointer; font-weight: 600;
 }
 .mode-toggle button.active { background: var(--primary); color: var(--ground); border-color: var(--primary); }
-/* Intrinsic size on the <img> (1983x793) so the browser reserves the right
-   box before the PNG loads; CSS then paints it at 288px wide, height auto.
-   Previously this was a 2.5:1 image forced into a 288x288 square and saved
-   only by object-fit, which left ~86px of dead space above and below it.
-   Superseded once the full-width banner lands. */
-.app-header img { width: 288px; height: auto; }
 .about-link {
   margin-left: 12px; padding: 6px 14px; border: 1px solid var(--rule); border-radius: 4px;
   background: var(--surface-alt); color: var(--ink); font-weight: 600; text-decoration: none;

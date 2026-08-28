@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { LeagueSettings, LeagueResponse } from './api/types';
 import { fetchLeague } from './api/client';
-import logo from './assets/logo.png';
+import Banner from './components/Banner';
 import SettingsPanel from './components/SettingsPanel';
 import DraftPosition from './components/DraftPosition';
 import ScarcityTable from './components/ScarcityTable';
@@ -132,19 +132,19 @@ export default function App() {
 
   if (isAboutPage) {
     return (
-      <div className="app">
-        <div className="app-header">
-          <img src={logo} alt="Mispricing Engine" width={1983} height={793} />
+      <div className="root">
+        <Banner collapsed={false} />
+        <div className="app">
+          <AboutPage />
         </div>
-        <AboutPage />
       </div>
     );
   }
 
   return (
-    <div className="app">
-      <div className="app-header">
-        <img src={logo} alt="Mispricing Engine" width={1983} height={793} />
+    <div className="root">
+      <Banner collapsed={mode === 'draft'} />
+      <div className="app">
         <div className="mode-toggle">
           <button type="button" className={mode === 'board' ? 'active' : ''} onClick={() => setMode('board')}>
             Board
@@ -154,16 +154,9 @@ export default function App() {
           </button>
         </div>
         <a href="/about" className="about-link">About</a>
-      </div>
       <p className="tagline">
         Find the <strong className="tagline-chase">mispriced</strong> players, not the{' '}
         <strong className="tagline-resist">good</strong> ones.
-      </p>
-      <p className="intro">
-        Most draft tools rank players. This one prices them, and shows you both prices side by side.{' '}
-        <strong>Expert</strong> is the analyst consensus; <strong>Our Value</strong> is how many points a
-        player scores above a freely-available replacement at his position, at whatever Variance and Model
-        Influence you've set; <strong>Bargain</strong> is how much cheaper he is than that value deserves.
       </p>
       <SettingsPanel
         settings={settings}
@@ -231,6 +224,7 @@ export default function App() {
         )}
       </div>
       <SimulationPanel settings={settings} />
+      </div>
     </div>
   );
 }
