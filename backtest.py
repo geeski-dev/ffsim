@@ -937,7 +937,8 @@ def run_ceiling_naive(seasons=SEASONS, seeds=range(8), base_seed: int = 0,
     return pd.DataFrame(rows)
 
 
-RUN_ORDER = ["NULL", "ADP_VOR", "REAL_NAIVE", "REAL", "CEILING_NAIVE", "CEILING"]
+RUN_ORDER = ["NULL", "PRIOR_NAIVE", "PRIOR_VOR", "ADP_VOR",
+             "REAL_NAIVE", "REAL", "CEILING_NAIVE", "CEILING"]
 
 
 def _summarize(df: pd.DataFrame) -> pd.DataFrame:
@@ -982,6 +983,9 @@ def report_all_runs(runs: dict[str, pd.DataFrame]) -> pd.DataFrame:
     _gap("CEILING", "NULL", "what perfect information is worth, architecture and all")
     _gap("CEILING_NAIVE", "NULL", "what perfect PROJECTIONS alone are worth, no valuation layer")
     _gap("CEILING", "CEILING_NAIVE", "what the VALUATION layer adds on top of perfect projections")
+    _gap("PRIOR_NAIVE", "NULL", "player-specific prior-production projections, no valuation layer")
+    _gap("PRIOR_VOR", "PRIOR_NAIVE", "what VOR adds on top of honest prior-production projections")
+    _gap("PRIOR_VOR", "NULL", "prior-production projections plus VOR vs rank-order drafting")
     _gap("ADP_VOR", "NULL", "same info as NULL, VOR instead of rank order -- valuation layer alone, real info")
     _gap("REAL_NAIVE", "NULL", "ECR info, no valuation layer -- projection quality alone, no VOR")
     _gap("REAL", "REAL_NAIVE", "what VOR adds on top of REAL's (imperfect) projections")
@@ -1163,6 +1167,91 @@ def project_from_source(season: int, source: str, raw_dir: str = RAW_DIR
     return cur, fit
 
 
+def project_from_history(season: int, raw_dir: str = RAW_DIR) -> tuple[pd.DataFrame, dict]:
+    """Player-specific projection from prior production only.
+
+    Universe is season Y's ADP file. All historical production comes through
+    inputs_as_of(season): 2x weight on Y-1, 1x on Y-2, PPR points from
+    _weekly_points, and distinct weeks as games. The prior ppg is shrunk
+    toward that position's Y-1 median among players with 8+ games. Expected
+    games and weekly dispersion reuse compute_risk_metrics; the symmetric
+    up/down spread is deliberately a placeholder until a separate dispersion
+    model is fit.
+    """
+    cur = _load_market05(season, raw_dir)
+    if cur is None:
+        raise ValueError(f"no historical ADP for {season}")
+    cur = cur.copy()
+
+    ia = inputs_as_of(season, raw_dir)
+    weekly = ia["weekly_prior"].copy()
+    weekly = weekly[weekly["season"].isin([season - 1, season - 2])].copy()
+    weekly = weekly.assign(fp=_weekly_points(weekly))
+
+    season_totals = (weekly.groupby(["key", "source_position", "season"])
+                     .agg(points=("fp", "sum"),
+                          games=("week", "nunique"))
+                     .reset_index())
+    by_key_season = season_totals.set_index(["key", "season"])
+
+    y1 = season_totals[season_totals["season"] == season - 1].copy()
+    y1["ppg"] = y1["points"] / y1["games"].replace(0, np.nan)
+    med = (y1[y1["games"] >= 8]
+           .groupby("source_position")["ppg"].median())
+    global_med = float(y1.loc[y1["games"] >= 8, "ppg"].median())
+    if not np.isfinite(global_med):
+        global_med = 0.0
+
+    keys = cur["key"].tolist()
+    positions = cur["source_position"].tolist()
+    risk = compute_risk_metrics(season, keys, positions, raw_dir)
+
+    weighted_points = np.zeros(len(cur), dtype=float)
+    weighted_games = np.zeros(len(cur), dtype=float)
+    prior_season_points = np.zeros(len(cur), dtype=float)
+    for i, k in enumerate(keys):
+        for s, w in [(season - 1, 2.0), (season - 2, 1.0)]:
+            if (k, s) not in by_key_season.index:
+                continue
+            row = by_key_season.loc[(k, s)]
+            weighted_points[i] += w * float(row["points"])
+            weighted_games[i] += w * float(row["games"])
+            if s == season - 1:
+                prior_season_points[i] = float(row["points"])
+
+    raw_ppg = np.divide(weighted_points, weighted_games,
+                        out=np.zeros_like(weighted_points),
+                        where=weighted_games > 0)
+    pos_median = np.array([float(med.get(p, global_med)) for p in positions])
+    pos_median = np.nan_to_num(pos_median, nan=global_med)
+    k = 8.0
+    shrunk_ppg = ((weighted_games * raw_ppg) + (k * pos_median)) / (weighted_games + k)
+
+    miss_rate = risk["miss_rate"]
+    weekly_cv = risk["weekly_cv"]
+    cur["weighted_points"] = weighted_points
+    cur["weighted_games"] = weighted_games
+    cur["raw_ppg"] = raw_ppg
+    cur["shrunk_ppg"] = shrunk_ppg
+    cur["prior_season_points"] = prior_season_points
+    cur["proj_points"] = shrunk_ppg * 17.0 * (1.0 - miss_rate)
+    cur["up_spread"] = np.clip(weekly_cv * 0.35, 0.05, 0.40)
+    cur["down_spread"] = cur["up_spread"]
+    cur["miss_rate"] = miss_rate
+    cur["weekly_cv"] = weekly_cv
+
+    fit = {
+        "season": season,
+        "source": "history",
+        "fit_years": [s for s in [season - 2, season - 1]
+                      if s in set(ia["fit_years"])],
+        "n_train": len(season_totals),
+        "n_priced": len(cur),
+        "n_missing_projection": int(cur["proj_points"].isna().sum()),
+    }
+    return cur, fit
+
+
 def build_source_board(season: int, source: str, raw_dir: str = RAW_DIR):
     """Draft pool for `source` in {'ecr', 'adp'}: identity/adp always from
     priced_baseline (so ADP_VOR's pool matches NULL's exactly), proj_points/
@@ -1206,6 +1295,29 @@ def build_source_board(season: int, source: str, raw_dir: str = RAW_DIR):
         "weekly_cv": risk["weekly_cv"],
     })
     return board, pts, played, weeks, pool_source_label, fit_info
+
+
+def build_history_board(season: int, raw_dir: str = RAW_DIR):
+    """Draft pool projected from player-specific prior production."""
+    proj_df, fit_info = project_from_history(season, raw_dir)
+    keys = proj_df["key"].tolist()
+    positions = proj_df["source_position"].tolist()
+    pts, played, weeks = realized_player_weeks(season, keys, raw_dir)
+    board = pd.DataFrame({
+        "key": keys,
+        "name": proj_df["source_player_name"].tolist(),
+        "position": positions,
+        "adp": proj_df["adp_overall"].to_numpy(dtype=float),
+        "realized_points": pts.sum(axis=1),
+        "realized_games": played.sum(axis=1),
+        "proj_points": proj_df["proj_points"].to_numpy(dtype=float),
+        "up_spread": proj_df["up_spread"].to_numpy(dtype=float),
+        "down_spread": proj_df["down_spread"].to_numpy(dtype=float),
+        "miss_rate": proj_df["miss_rate"].to_numpy(dtype=float),
+        "weekly_cv": proj_df["weekly_cv"].to_numpy(dtype=float),
+        "prior_season_points": proj_df["prior_season_points"].to_numpy(dtype=float),
+    })
+    return board, pts, played, weeks, "historical ADP", fit_info
 
 
 # "bpa" (ceiling_weight=0, risk_penalty=0, downside_weight=0) is inert to
@@ -1268,6 +1380,107 @@ def run_adp_vor(seasons=REAL_SEASONS, seeds=range(8), base_seed: int = 0,
     has -- same REAL_SEASONS, not a separate exclusion rule."""
     return _run_vor_source("ADP_VOR", "adp", seasons, seeds, base_seed,
                            strategy, league, raw_dir)
+
+
+def _run_history(run_name: str, policy, seasons, seeds, base_seed: int,
+                 league: League, raw_dir: str, use_vor: bool) -> pd.DataFrame:
+    round_cap, _ = compute_round_cap(SEASONS, TEAMS, raw_dir)
+    base_league = _capped_league(league, round_cap)
+    rows = []
+    for season in seasons:
+        board, pts, played, weeks, pool_source, fit_info = build_history_board(season, raw_dir)
+        print(f"  {season} [{run_name}]: history fit from {fit_info['fit_years']} "
+              f"({fit_info['n_train']} player-seasons), pool={pool_source}, "
+              f"{fit_info['n_priced']} priced, "
+              f"{fit_info['n_missing_projection']} NaN projections")
+        if use_vor:
+            board = _with_valuation(board, "proj_points", base_league,
+                                    up_spread=board["up_spread"].to_numpy(),
+                                    down_spread=board["down_spread"].to_numpy(),
+                                    miss_rate=board["miss_rate"].to_numpy())
+        else:
+            board = board.assign(vor=0.0)
+        positions = board["position"].to_numpy()
+        prior = trailing_prior_ppg(season, board["key"].tolist(),
+                                   board["position"].tolist(), raw_dir)
+        for slot in range(1, TEAMS + 1):
+            lg = dataclasses.replace(base_league, slot=slot)
+            field_ = _blind_field(lg)
+            for seed_idx in seeds:
+                rngs = _rngs_for_draft(base_seed, season, seed_idx, TEAMS)
+                rosters = run_backtest_draft(board, lg, policy, field_, rngs)
+                scored = score_season(positions, rosters, pts, played, prior, lg)
+                rank, points = _rank_and_points(scored["starter_pts"], slot)
+                rows.append(dict(run=run_name, season=season, slot=slot,
+                                 seed=seed_idx, rank=rank, starter_pts=points))
+    return pd.DataFrame(rows)
+
+
+def run_prior_vor(seasons=SEASONS, seeds=range(8), base_seed: int = 0,
+                  strategy: Strategy = PRESETS["bpa"], league: League = DEFAULT_LEAGUE,
+                  raw_dir: str = RAW_DIR) -> pd.DataFrame:
+    """Player-specific prior-production projections drafted by VOR."""
+    return _run_history("PRIOR_VOR", strategy, seasons, seeds, base_seed,
+                        league, raw_dir, use_vor=True)
+
+
+def run_prior_naive(seasons=SEASONS, seeds=range(8), base_seed: int = 0,
+                    league: League = DEFAULT_LEAGUE, raw_dir: str = RAW_DIR) -> pd.DataFrame:
+    """Player-specific prior-production projections drafted by raw points."""
+    return _run_history("PRIOR_NAIVE", _NaivePoints("proj_points"), seasons,
+                        seeds, base_seed, league, raw_dir, use_vor=False)
+
+
+def history_projection_sanity_report(seasons=SEASONS, raw_dir: str = RAW_DIR
+                                     ) -> pd.DataFrame:
+    rows = []
+    chubb_row = None
+    for season in seasons:
+        proj, _ = project_from_history(season, raw_dir)
+        nan_proj = int(proj["proj_points"].isna().sum())
+        prior_corr = proj["proj_points"].corr(proj["weighted_points"])
+        has_prior = proj["weighted_points"] > 0
+        prior_corr_with_history = proj.loc[has_prior, "proj_points"].corr(
+            proj.loc[has_prior, "weighted_points"])
+        top50 = proj.sort_values("adp_overall").head(50)
+        top50_adp_corr = top50["proj_points"].corr(-top50["adp_overall"])
+        rows.append(dict(season=season, n=len(proj), nan_proj=nan_proj,
+                         corr_weighted_prior_all=prior_corr,
+                         corr_weighted_prior_with_history=prior_corr_with_history,
+                         corr_top50_neg_adp=top50_adp_corr))
+
+        if season == 2023:
+            board, _, _, _, _, _ = build_history_board(season, raw_dir)
+            round_cap, _ = compute_round_cap(SEASONS, TEAMS, raw_dir)
+            league = _capped_league(DEFAULT_LEAGUE, round_cap)
+            board = _with_valuation(board, "proj_points", league,
+                                    up_spread=board["up_spread"].to_numpy(),
+                                    down_spread=board["down_spread"].to_numpy(),
+                                    miss_rate=board["miss_rate"].to_numpy())
+            board = board.sort_values("vor", ascending=False).reset_index(drop=True)
+            chubb = board[board["name"].str.contains("Nick Chubb", case=False, na=False)]
+            if len(chubb):
+                r = chubb.iloc[0]
+                chubb_row = {
+                    "rank": int(chubb.index[0] + 1),
+                    "name": r["name"],
+                    "adp": float(r["adp"]),
+                    "proj_points": float(r["proj_points"]),
+                    "vor": float(r["vor"]),
+                }
+
+    out = pd.DataFrame(rows)
+    print("\nPRIOR PROJECTION SANITY CHECKS")
+    print("=" * 78)
+    print(out.round(3).to_string(index=False))
+    if chubb_row:
+        print("\n2023 PRIOR_VOR board: "
+              f"{chubb_row['name']} rank {chubb_row['rank']}, "
+              f"ADP {chubb_row['adp']:.1f}, proj_points "
+              f"{chubb_row['proj_points']:.1f}, VOR {chubb_row['vor']:.1f}")
+    else:
+        print("\n2023 PRIOR_VOR board: Nick Chubb not found")
+    return out
 
 
 def _draft_composition_record(run_name: str, season: int, slot: int, seed_idx: int,
@@ -1421,15 +1634,19 @@ def sign_test(runs: dict[str, pd.DataFrame], against: str = "NULL") -> pd.DataFr
 def full_report(seasons=SEASONS, real_seasons=REAL_SEASONS, seeds=range(8),
                 base_seed: int = 0, model_preset: str = "bpa",
                 raw_dir: str = RAW_DIR) -> dict[str, pd.DataFrame]:
-    """NULL, ADP_VOR, REAL_NAIVE, REAL, CEILING_NAIVE, CEILING -- six runs,
-    one table, plus the sign test against NULL."""
+    """All backtest runs, one table, plus the sign test against NULL."""
     runs = stage3_report(seasons, seeds, base_seed, model_preset, raw_dir)
     if "CEILING" not in runs:
         return runs   # NULL self-test failed; stage3_report already stopped
 
-    print(f"\nSTAGE 4 -- ADP_VOR, REAL_NAIVE, REAL "
-          f"(risk_penalty=0.4, downside_weight=0.35 -- see BPA_RISK_AWARE), "
-          f"{len(list(seeds))} seeds x 12 slots\n")
+    print(f"\nSTAGE 4 -- PRIOR_NAIVE, PRIOR_VOR, ADP_VOR, REAL_NAIVE, REAL, "
+          f"{len(list(seeds))} seeds x 12 slots")
+    print("  PRIOR_VOR drafts by pure VOR from player-specific prior projections.")
+    print("  ADP_VOR and REAL keep risk_penalty=0.4, downside_weight=0.35 "
+          "-- see BPA_RISK_AWARE.\n")
+    history_projection_sanity_report(seasons, raw_dir)
+    runs["PRIOR_NAIVE"] = run_prior_naive(seasons, seeds, base_seed, raw_dir=raw_dir)
+    runs["PRIOR_VOR"] = run_prior_vor(seasons, seeds, base_seed, raw_dir=raw_dir)
     runs["ADP_VOR"] = run_adp_vor(real_seasons, seeds, base_seed, raw_dir=raw_dir)
     runs["REAL_NAIVE"] = run_real_naive(real_seasons, seeds, base_seed, raw_dir=raw_dir)
     runs["REAL"] = run_real(real_seasons, seeds, base_seed, raw_dir=raw_dir)
