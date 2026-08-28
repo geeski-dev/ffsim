@@ -8,6 +8,7 @@ import ScarcityTable from './components/ScarcityTable';
 import PlayerBoard, { type BoardState } from './components/PlayerBoard';
 import SimulationPanel from './components/SimulationPanel';
 import { readVersionedStorage, writeVersionedStorage } from './storage/versionedStorage';
+import { useDraftState } from './hooks/useDraftState';
 import './App.css';
 
 const DEFAULT_SETTINGS: LeagueSettings = {
@@ -57,6 +58,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requestIdRef = useRef(0);
+  const draft = useDraftState();
 
   useEffect(() => {
     writeVersionedStorage(STORAGE_KEY, STORAGE_VERSION, { settings, boardState, mode });
@@ -77,6 +79,15 @@ export default function App() {
     setSettings(DEFAULT_SETTINGS);
     setBoardState(DEFAULT_BOARD_STATE);
     setMode('board');
+  }
+
+  // Separate from resetSettings on purpose, and lives in a different place
+  // in the UI -- merging them is how someone tidying their settings at pick
+  // 90 loses ninety picks.
+  function resetDraft() {
+    if (window.confirm('Reset the draft? This clears every pick you’ve marked. Settings are not affected.')) {
+      draft.resetDraft();
+    }
   }
 
   useEffect(() => {
@@ -104,6 +115,14 @@ export default function App() {
       <div className="app-header">
         <img src={logo} alt="Mispricing Engine logo" width={36} height={36} />
         <h1>Mispricing Engine</h1>
+        <div className="mode-toggle">
+          <button type="button" className={mode === 'board' ? 'active' : ''} onClick={() => setMode('board')}>
+            Board
+          </button>
+          <button type="button" className={mode === 'draft' ? 'active' : ''} onClick={() => setMode('draft')}>
+            Draft
+          </button>
+        </div>
       </div>
       <p className="tagline">Find the mispriced players, not the good ones.</p>
       <p className="intro">
@@ -114,7 +133,22 @@ export default function App() {
       </p>
       <div className="columns">
         <div className="column-left">
-          <SettingsPanel settings={settings} onChange={handleSettingsChange} onReset={resetSettings} />
+          <SettingsPanel
+            settings={settings}
+            onChange={handleSettingsChange}
+            onReset={resetSettings}
+            draftMode={mode === 'draft'}
+          />
+          {mode === 'draft' && (
+            <div className="panel draft-status-panel">
+              <h2>Draft</h2>
+              <div className="stat">Overall pick <strong>{draft.draftPosition}</strong></div>
+              <div className="stat">{draft.mineSet.size} mine · {draft.goneSet.size} gone</div>
+              <button type="button" className="reset-draft" onClick={resetDraft}>
+                Reset draft
+              </button>
+            </div>
+          )}
         </div>
         <div className="column-right">
           {error && <div className="error">Could not reach the API: {error}</div>}
@@ -140,6 +174,14 @@ export default function App() {
                 modelInfluence={settings.model_influence}
                 boardState={boardState}
                 onBoardStateChange={handleBoardStateChange}
+                mode={mode}
+                lineup={settings.lineup}
+                goneSet={draft.goneSet}
+                mineSet={draft.mineSet}
+                onMarkGone={draft.markGone}
+                onMarkMine={draft.markMine}
+                onUndo={draft.undo}
+                canUndo={draft.canUndo}
               />
             </>
           )}

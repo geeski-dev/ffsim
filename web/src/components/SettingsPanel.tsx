@@ -1,9 +1,11 @@
+import { useState } from 'react';
 import type { LeagueSettings, ModelInfluence, Variance } from '../api/types';
 
 interface Props {
   settings: LeagueSettings;
   onChange: (next: LeagueSettings) => void;
   onReset: () => void;
+  draftMode: boolean;
 }
 
 const SCORING_OPTIONS: { value: LeagueSettings['scoring']; label: string }[] = [
@@ -29,7 +31,20 @@ const MODEL_INFLUENCE_OPTIONS: { value: ModelInfluence; label: string }[] = [
   { value: 'Extreme', label: 'Extreme (our board)' },
 ];
 
-export default function SettingsPanel({ settings, onChange, onReset }: Props) {
+export default function SettingsPanel({ settings, onChange, onReset, draftMode }: Props) {
+  // Re-locks every time you enter draft mode -- state, not a ref (see
+  // PlayerBoard's own comment on why: a ref mutated during render is not
+  // safe under StrictMode's double-invoked render pass). Never auto-unlocks
+  // itself; only the explicit checkbox below does that, on purpose --
+  // "must not fumble a setting at pick 46."
+  const [wasDraftMode, setWasDraftMode] = useState(draftMode);
+  const [unlocked, setUnlocked] = useState(false);
+  if (draftMode !== wasDraftMode) {
+    setWasDraftMode(draftMode);
+    if (draftMode) setUnlocked(false);
+  }
+  const knobsLocked = draftMode && !unlocked;
+
   function update(patch: Partial<LeagueSettings>) {
     const next = { ...settings, ...patch };
     if (next.slot > next.teams) next.slot = next.teams;
@@ -128,6 +143,7 @@ export default function SettingsPanel({ settings, onChange, onReset }: Props) {
         Variance
         <select
           value={settings.variance}
+          disabled={knobsLocked}
           onChange={(e) => update({ variance: e.target.value as LeagueSettings['variance'] })}
         >
           {VARIANCE_OPTIONS.map((opt) => (
@@ -140,6 +156,7 @@ export default function SettingsPanel({ settings, onChange, onReset }: Props) {
         Model Influence
         <select
           value={settings.model_influence}
+          disabled={knobsLocked}
           onChange={(e) => update({ model_influence: e.target.value as LeagueSettings['model_influence'] })}
         >
           {MODEL_INFLUENCE_OPTIONS.map((opt) => (
@@ -152,6 +169,13 @@ export default function SettingsPanel({ settings, onChange, onReset }: Props) {
           Off shows the consensus board. We aren't asserting we're right — that's the only
           setting whose behavior has actually been measured.
         </p>
+      )}
+
+      {draftMode && (
+        <label className="knob-lock-toggle">
+          <input type="checkbox" checked={unlocked} onChange={(e) => setUnlocked(e.target.checked)} />
+          Unlock Variance / Model Influence
+        </label>
       )}
 
       <button type="button" className="reset-settings" onClick={onReset}>

@@ -1,6 +1,12 @@
 .app { max-width: 1400px; margin: 0 auto; padding: 24px; text-align: left; }
 
 .app-header { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+.mode-toggle { margin-left: auto; display: flex; gap: 4px; }
+.mode-toggle button {
+  padding: 6px 14px; border: 1px solid var(--rule); background: var(--surface-alt);
+  color: var(--ink); border-radius: 4px; cursor: pointer; font-weight: 600;
+}
+.mode-toggle button.active { background: var(--primary); color: var(--ground); border-color: var(--primary); }
 .app-header img { height: 36px; width: 36px; object-fit: contain; }
 .app-header h1 { margin: 0; font-size: 1.5rem; color: var(--ink); }
 .tagline { margin: 0 0 20px; color: var(--ink-mute); font-size: 0.95rem; }
@@ -41,6 +47,41 @@ th[title] { text-decoration: underline dotted var(--rule); text-underline-offset
   background: var(--surface-alt); color: var(--ink); font-weight: 600; cursor: pointer;
 }
 .reset-settings:hover { border-color: var(--primary); }
+
+.knob-lock-toggle { display: flex !important; align-items: center; gap: 6px; font-weight: normal !important; }
+.knob-lock-toggle input { width: auto !important; margin: 0; }
+
+.draft-status-panel { margin-top: 16px; }
+.reset-draft {
+  width: 100%; margin-top: 8px; padding: 8px 10px; border: 1px solid var(--error); border-radius: 4px;
+  background: var(--surface-alt); color: var(--error); font-weight: 600; cursor: pointer;
+}
+.reset-draft:hover { background: var(--error-tint); }
+
+.draft-toolbar { display: flex; gap: 8px; margin-bottom: 10px; }
+.draft-search {
+  flex: 1; padding: 10px 12px; font-size: 1rem; background: var(--surface-alt);
+  color: var(--ink); border: 1px solid var(--rule); border-radius: 6px;
+}
+.draft-search:focus { outline: 2px solid var(--primary); outline-offset: -1px; }
+.undo-button {
+  padding: 8px 16px; border: 1px solid var(--rule); border-radius: 6px;
+  background: var(--surface-alt); color: var(--ink); font-weight: 600; cursor: pointer;
+}
+.undo-button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+table.draft-mode th, table.draft-mode td { padding: 12px 10px; font-size: 1rem; }
+.mark-col { width: 1%; white-space: nowrap; }
+.mine-button {
+  padding: 6px 12px; border: 1px solid var(--primary); border-radius: 4px;
+  background: transparent; color: var(--primary); font-weight: 700; cursor: pointer;
+}
+.mine-button:hover { background: var(--primary); color: var(--ground); }
+
+table.draft-mode tbody tr { cursor: pointer; }
+tr.row-gone { opacity: 0.45; text-decoration: line-through; cursor: default !important; }
+tr.row-gone .mine-button { display: none; }
+tr.row-mine { background: color-mix(in srgb, var(--primary) 14%, transparent); text-decoration: none; opacity: 1; cursor: default !important; }
 
 .reshuffle-banner {
   font-size: 0.88rem; color: var(--ink); background: var(--surface-alt);

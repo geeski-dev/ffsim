@@ -1,11 +1,15 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { ModelInfluence, PlayerRow, Variance } from '../api/types';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import type { LineupSettings, ModelInfluence, PlayerRow, Variance } from '../api/types';
 
-const POSITIONS = ['All', 'QB', 'RB', 'WR', 'TE'] as const;
+const BOARD_POSITIONS = ['All', 'QB', 'RB', 'WR', 'TE'] as const;
+// Draft mode collapses the filter to a couple of presets on purpose -- fewer
+// decisions during a live draft, not more. "Needed" is computed from mine +
+// the league's own lineup requirements (see neededPositions below).
+const DRAFT_POSITIONS = ['All', 'Needed'] as const;
 
 export type SortKey = 'name' | 'position' | 'team' | 'adp' | 'expert_rank' | 'expert_rank_lo' | 'our_value' | 'our_range_lo' | 'bargain';
 export type SortDirection = 'asc' | 'desc';
-export type PositionFilter = (typeof POSITIONS)[number];
+export type PositionFilter = (typeof BOARD_POSITIONS)[number] | (typeof DRAFT_POSITIONS)[number];
 
 export interface BoardState {
   sortKey: SortKey;
@@ -19,7 +23,17 @@ interface Props {
   modelInfluence: ModelInfluence;
   boardState: BoardState;
   onBoardStateChange: (next: BoardState) => void;
+  mode: 'board' | 'draft';
+  lineup: LineupSettings;
+  goneSet: Set<string>;
+  mineSet: Set<string>;
+  onMarkGone: (playerId: string) => void;
+  onMarkMine: (playerId: string) => void;
+  onUndo: () => void;
+  canUndo: boolean;
 }
+
+const FLEX_ELIGIBLE = ['RB', 'WR', 'TE'] as const;
 
 const COLUMNS: { key: SortKey; label: string; title?: string }[] = [
   { key: 'name', label: 'Name' },
@@ -85,9 +99,41 @@ export default function PlayerBoard({
   modelInfluence,
   boardState,
   onBoardStateChange,
+  mode,
+  lineup,
+  goneSet,
+  mineSet,
+  onMarkGone,
+  onMarkMine,
+  onUndo,
+  canUndo,
 }: Props) {
   const { sortKey, sortDir, positionFilter } = boardState;
   const [reshuffle, setReshuffle] = useState<{ up: number; down: number; movers: string[] } | null>(null);
+
+  // Entry speed is the whole design constraint here: search stays focused,
+  // typing filters instantly, Enter marks the top (best-ranked) match gone
+  // and hands focus straight back for the next name. Not persisted -- it's
+  // a transient per-session typing buffer, not draft state.
+  const [searchText, setSearchText] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (mode === 'draft') searchInputRef.current?.focus();
+  }, [mode]);
+
+  const neededPositions = useMemo(() => {
+    const counts: Partial<Record<string, number>> = {};
+    for (const p of players) {
+      if (mineSet.has(p.player_id)) counts[p.position] = (counts[p.position] ?? 0) + 1;
+    }
+    const needed = new Set<string>();
+    for (const pos of ['QB', 'RB', 'WR', 'TE'] as const) {
+      if ((counts[pos] ?? 0) < (lineup[pos] ?? 0)) needed.add(pos);
+    }
+    const flexFilled = FLEX_ELIGIBLE.reduce((sum, pos) => sum + Math.max(0, (counts[pos] ?? 0) - (lineup[pos] ?? 0)), 0);
+    if (flexFilled < (lineup.FLEX ?? 0)) FLEX_ELIGIBLE.forEach((pos) => needed.add(pos));
+    return needed;
+  }, [players, mineSet, lineup]);
 
   // Settings change the instant a dropdown fires; `players` only updates
   // later, once the debounced fetch resolves. So "did a knob change cause
@@ -147,7 +193,16 @@ export default function PlayerBoard({
   }
 
   const rows = useMemo(() => {
-    const filtered = positionFilter === 'All' ? players : players.filter((p) => p.position === positionFilter);
+    let filtered = players;
+    if (positionFilter === 'Needed') {
+      filtered = filtered.filter((p) => neededPositions.has(p.position));
+    } else if (positionFilter !== 'All') {
+      filtered = filtered.filter((p) => p.position === positionFilter);
+    }
+    if (mode === 'draft' && searchText.trim()) {
+      const needle = searchText.trim().toLowerCase();
+      filtered = filtered.filter((p) => p.name.toLowerCase().includes(needle));
+    }
     return [...filtered].sort((a, b) => {
       const av = sortValue(a, sortKey);
       const bv = sortValue(b, sortKey);
@@ -157,7 +212,15 @@ export default function PlayerBoard({
       const cmp = typeof av === 'string' ? av.localeCompare(bv as string) : (av as number) - (bv as number);
       return sortDir === 'asc' ? cmp : -cmp;
     });
-  }, [players, positionFilter, sortKey, sortDir]);
+  }, [players, positionFilter, neededPositions, mode, searchText, sortKey, sortDir]);
+
+  function markTopMatchGone() {
+    const top = rows[0];
+    if (!top) return;
+    onMarkGone(top.player_id);
+    setSearchText('');
+    searchInputRef.current?.focus();
+  }
 
   const rowRefs = useRef(new Map<string, HTMLTableRowElement>());
   const prevTops = useRef(new Map<string, number>());
@@ -208,8 +271,32 @@ export default function PlayerBoard({
           {reshuffle.movers.length > 0 && <> Biggest movers: {reshuffle.movers.join(', ')}.</>}
         </div>
       )}
+      {mode === 'draft' && (
+        <div className="draft-toolbar">
+          <input
+            ref={searchInputRef}
+            type="text"
+            className="draft-search"
+            placeholder="Type a name, Enter marks the top match gone…"
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                markTopMatchGone();
+              } else if (e.key === 'Backspace' && searchText === '') {
+                e.preventDefault();
+                onUndo();
+              }
+            }}
+          />
+          <button type="button" className="undo-button" disabled={!canUndo} onClick={onUndo} title="Backspace on an empty search box does the same thing">
+            Undo
+          </button>
+        </div>
+      )}
       <div className="position-filter">
-        {POSITIONS.map((pos) => (
+        {(mode === 'draft' ? DRAFT_POSITIONS : BOARD_POSITIONS).map((pos) => (
           <button
             key={pos}
             className={pos === positionFilter ? 'active' : ''}
@@ -220,9 +307,10 @@ export default function PlayerBoard({
         ))}
       </div>
       <div className="table-scroll">
-        <table>
+        <table className={mode === 'draft' ? 'draft-mode' : undefined}>
           <thead>
             <tr>
+              {mode === 'draft' && <th className="mark-col">Mark</th>}
               {COLUMNS.map((col) => (
                 <th key={col.key} title={col.title} onClick={() => toggleSort(col.key)}>
                   {col.label}
@@ -232,31 +320,54 @@ export default function PlayerBoard({
             </tr>
           </thead>
           <tbody>
-            {rows.map((p) => (
-              <tr
-                key={p.player_id}
-                ref={(el) => {
-                  if (el) rowRefs.current.set(p.player_id, el);
-                  else rowRefs.current.delete(p.player_id);
-                }}
-              >
-                <td>{p.name}</td>
-                <td>{p.position}</td>
-                <td>{p.team}</td>
-                <td>{p.adp.toFixed(1)}</td>
-                <td className={p.expert_rank === null ? 'bargain-null' : undefined}>
-                  {p.expert_rank === null ? EM_DASH : p.expert_rank.toFixed(1)}
-                </td>
-                <td className={p.expert_rank_lo === null ? 'bargain-null' : undefined}>
-                  {formatRange(p.expert_rank_lo, p.expert_rank_hi)}
-                </td>
-                <td>{p.our_value.toFixed(1)}</td>
-                <td>{formatRange(p.our_range_lo, p.our_range_hi)}</td>
-                <td className={p.bargain === null ? 'bargain-null' : p.bargain >= 0 ? 'bargain-positive' : 'bargain-negative'}>
-                  {p.bargain === null ? EM_DASH : formatSigned(p.bargain)}
-                </td>
-              </tr>
-            ))}
+            {rows.map((p) => {
+              const isGone = goneSet.has(p.player_id);
+              const isMine = mineSet.has(p.player_id);
+              const rowClass = mode === 'draft' ? (isMine ? 'row-mine' : isGone ? 'row-gone' : undefined) : undefined;
+              return (
+                <tr
+                  key={p.player_id}
+                  className={rowClass}
+                  onClick={mode === 'draft' && !isGone ? () => onMarkGone(p.player_id) : undefined}
+                  ref={(el) => {
+                    if (el) rowRefs.current.set(p.player_id, el);
+                    else rowRefs.current.delete(p.player_id);
+                  }}
+                >
+                  {mode === 'draft' && (
+                    <td className="mark-col">
+                      {!isGone && (
+                        <button
+                          type="button"
+                          className="mine-button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onMarkMine(p.player_id);
+                          }}
+                        >
+                          Mine
+                        </button>
+                      )}
+                    </td>
+                  )}
+                  <td>{p.name}</td>
+                  <td>{p.position}</td>
+                  <td>{p.team}</td>
+                  <td>{p.adp.toFixed(1)}</td>
+                  <td className={p.expert_rank === null ? 'bargain-null' : undefined}>
+                    {p.expert_rank === null ? EM_DASH : p.expert_rank.toFixed(1)}
+                  </td>
+                  <td className={p.expert_rank_lo === null ? 'bargain-null' : undefined}>
+                    {formatRange(p.expert_rank_lo, p.expert_rank_hi)}
+                  </td>
+                  <td>{p.our_value.toFixed(1)}</td>
+                  <td>{formatRange(p.our_range_lo, p.our_range_hi)}</td>
+                  <td className={p.bargain === null ? 'bargain-null' : p.bargain >= 0 ? 'bargain-positive' : 'bargain-negative'}>
+                    {p.bargain === null ? EM_DASH : formatSigned(p.bargain)}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
