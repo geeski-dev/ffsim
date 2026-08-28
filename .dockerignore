@@ -1,0 +1,14 @@
+my_leagues.py
+data/raw/
+web/
+docs/
+tests/
+*.md
+.git/
+__pycache__/
+.venv/
+.DS_Store
+.pytest_cache/
+.mypy_cache/
+node_modules/
+dist/

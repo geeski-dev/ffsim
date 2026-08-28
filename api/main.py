@@ -56,6 +56,11 @@ SCORING_BUILDERS = {
 }
 
 
+@app.get("/health")
+def health() -> dict[str, bool]:
+    return {"ok": True}
+
+
 def build_league(settings: LeagueSettingsRequest) -> ff.League:
     scoring_fn = SCORING_BUILDERS[settings.scoring]
     lineup = settings.lineup.model_dump()
