@@ -76,6 +76,8 @@ export function useDraftState() {
 
   return {
     draftPosition: state.draftPosition,
+    gone: state.gone,
+    mine: state.mine,
     goneSet,
     mineSet,
     markGone: (playerId: string) => mark(playerId, false),

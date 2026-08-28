@@ -23,12 +23,16 @@ from ffsim.valuation import effective_starters, replacement_levels
 from models import (
     LeagueResponse,
     LeagueSettingsRequest,
+    NextPickPlayerRow,
+    NextPickRequest,
+    NextPickResponse,
     PickChip,
     PlayerRow,
     PositionScarcityRow,
     SimulateRequest,
     SimulateResponse,
     StrategyResultRow,
+    TierDepletionRow,
 )
 
 app = FastAPI(title="ffsim API")
@@ -155,6 +159,84 @@ def api_league(settings: LeagueSettingsRequest) -> LeagueResponse:
         scarcity=scarcity,
         players=players,
         picks=picks,
+    )
+
+
+def _positions_still_needed(mine_positions: list[str], league: "ff.League") -> set[str]:
+    """Which starting positions aren't filled yet, given what `mine` holds.
+
+    Display-only: this decides which positions are worth a tier-depletion
+    flag, not a drafting decision, so it doesn't need _need_bonus's urgency
+    weighting -- just "is there still an empty starting slot here."
+    """
+    counts: dict[str, int] = {}
+    for p in mine_positions:
+        counts[p] = counts.get(p, 0) + 1
+    needed = {pos for pos in league.positions if counts.get(pos, 0) < league.lineup.get(pos, 0)}
+    flex_req = league.lineup.get("FLEX", 0)
+    flex_filled = sum(max(0, counts.get(p, 0) - league.lineup.get(p, 0)) for p in league.flex_eligible)
+    if flex_filled < flex_req:
+        needed.update(league.flex_eligible)
+    return needed
+
+
+@app.post("/api/next-pick", response_model=NextPickResponse)
+def api_next_pick(req: NextPickRequest) -> NextPickResponse:
+    """What to do right now, framed around your NEXT pick, not a ranked list.
+
+    Replacement/VOR are never recomputed from what's left (see build_strategy/
+    value_components -- same static board every other endpoint uses). What
+    DOES change here: availability (ff.availability, at your next pick) and
+    tier depletion, both filtered to players not yet gone.
+    """
+    league = build_league(req)
+    pool = POOLS[req.scoring]
+    board = ff.build_board(pool, league)
+
+    strategy = build_strategy(req, league)
+    comp = strategy.value_components(board)
+    board = board.copy()
+    board["our_value"] = comp["score"]
+
+    gone = set(req.gone)
+    available = board[~board["player_id"].isin(gone)].copy()
+
+    pick_numbers = league.pick_numbers()
+    next_pick = next((p for p in pick_numbers if p > req.current_pick), None)
+    target_pick = req.target_pick if req.target_pick is not None else next_pick
+    available["availability"] = (
+        ff.availability(available, target_pick).to_numpy() if target_pick is not None else 1.0
+    )
+
+    ranked = available.sort_values("our_value", ascending=False).head(15)
+    take_now: list[NextPickPlayerRow] = []
+    can_wait: list[NextPickPlayerRow] = []
+    for row in ranked.itertuples():
+        item = NextPickPlayerRow(
+            player_id=row.player_id, name=row.name, position=row.position, team=row.team,
+            our_value=round(row.our_value, 1), availability=round(float(row.availability), 3),
+        )
+        (take_now if row.availability < 0.5 else can_wait).append(item)
+
+    mine_positions = board.loc[board["player_id"].isin(set(req.mine)), "position"].tolist()
+    tier_depletion = []
+    for pos in sorted(_positions_still_needed(mine_positions, league)):
+        pos_avail = available[available["position"] == pos]
+        if pos_avail.empty:
+            continue
+        current_tier = int(pos_avail["tier"].min())
+        remaining = int((pos_avail["tier"] == current_tier).sum())
+        tier_depletion.append(TierDepletionRow(position=pos, tier=current_tier, remaining=remaining))
+
+    return NextPickResponse(
+        current_pick=req.current_pick,
+        next_pick=next_pick,
+        picks_away=(next_pick - req.current_pick) if next_pick is not None else None,
+        target_pick=target_pick,
+        hedge_window=league.hedge_window(),
+        take_now=take_now,
+        can_wait=can_wait,
+        tier_depletion=tier_depletion,
     )
 
 

@@ -68,6 +68,42 @@ export interface SimulateRequest extends LeagueSettings {
   n_sims: number;
 }
 
+export interface NextPickRequest extends LeagueSettings {
+  gone: string[];
+  mine: string[];
+  current_pick: number;
+  // Which overall pick to preview availability for. Omit for "my own next
+  // pick" (the default the header names); a future round-chip click passes
+  // an explicit overall pick here instead -- same request shape, same panel.
+  target_pick?: number;
+}
+
+export interface NextPickPlayerRow {
+  player_id: string;
+  name: string;
+  position: string;
+  team: string;
+  our_value: number;
+  availability: number;
+}
+
+export interface TierDepletionRow {
+  position: string;
+  tier: number;
+  remaining: number;
+}
+
+export interface NextPickResponse {
+  current_pick: number;
+  next_pick: number | null;
+  picks_away: number | null;
+  target_pick: number | null;
+  hedge_window: number;
+  take_now: NextPickPlayerRow[];
+  can_wait: NextPickPlayerRow[];
+  tier_depletion: TierDepletionRow[];
+}
+
 export interface StrategyResultRow {
   strategy: string;
   champ_pct: number;

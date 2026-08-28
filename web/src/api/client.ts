@@ -1,6 +1,8 @@
 import type {
   LeagueSettings,
   LeagueResponse,
+  NextPickRequest,
+  NextPickResponse,
   SimulateRequest,
   SimulateResponse,
 } from './types';
@@ -26,4 +28,8 @@ export function fetchLeague(settings: LeagueSettings): Promise<LeagueResponse> {
 
 export function runSimulation(req: SimulateRequest): Promise<SimulateResponse> {
   return post<SimulateResponse>('/api/simulate', req);
+}
+
+export function fetchNextPick(req: NextPickRequest): Promise<NextPickResponse> {
+  return post<NextPickResponse>('/api/next-pick', req);
 }

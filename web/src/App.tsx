@@ -6,6 +6,7 @@ import SettingsPanel from './components/SettingsPanel';
 import DraftPosition from './components/DraftPosition';
 import ScarcityTable from './components/ScarcityTable';
 import PlayerBoard, { type BoardState } from './components/PlayerBoard';
+import NextPickPanel from './components/NextPickPanel';
 import SimulationPanel from './components/SimulationPanel';
 import { readVersionedStorage, writeVersionedStorage } from './storage/versionedStorage';
 import { useDraftState } from './hooks/useDraftState';
@@ -168,6 +169,14 @@ export default function App() {
                 totalRounds={league.total_rounds}
               />
               <ScarcityTable rows={league.scarcity} />
+              {mode === 'draft' && (
+                <NextPickPanel
+                  settings={settings}
+                  gone={draft.gone}
+                  mine={draft.mine}
+                  currentPick={draft.draftPosition}
+                />
+              )}
               <PlayerBoard
                 players={league.players}
                 variance={settings.variance}

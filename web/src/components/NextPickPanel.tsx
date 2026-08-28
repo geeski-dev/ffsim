@@ -1,0 +1,146 @@
+import { useEffect, useRef, useState } from 'react';
+import type { LeagueSettings, NextPickResponse } from '../api/types';
+import { fetchNextPick } from '../api/client';
+
+interface Props {
+  settings: LeagueSettings;
+  gone: string[];
+  mine: string[];
+  currentPick: number;
+}
+
+const DEBOUNCE_MS = 200;
+
+export default function NextPickPanel({ settings, gone, mine, currentPick }: Props) {
+  // Not hardcoded to "my next pick" -- a parameter with my next pick as the
+  // default (null). A later change wires a click on a round chip in
+  // DraftPosition straight into this; same endpoint, same component, just a
+  // different target_pick. The number input below is the interim way to
+  // reach that parameter until the chip click lands.
+  const [targetPickOverride, setTargetPickOverride] = useState<string>('');
+  const [resp, setResp] = useState<NextPickResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const requestIdRef = useRef(0);
+
+  const parsedOverride = targetPickOverride.trim() === '' ? undefined : Number(targetPickOverride);
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      const requestId = ++requestIdRef.current;
+      fetchNextPick({
+        ...settings,
+        gone,
+        mine,
+        current_pick: currentPick,
+        target_pick: parsedOverride,
+      })
+        .then((res) => {
+          if (requestIdRef.current !== requestId) return;
+          setResp(res);
+          setError(null);
+        })
+        .catch((e) => {
+          if (requestIdRef.current !== requestId) return;
+          setError(e instanceof Error ? e.message : String(e));
+        });
+    }, DEBOUNCE_MS);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings, gone, mine, currentPick, parsedOverride]);
+
+  return (
+    <div className="panel">
+      <h2>Next pick</h2>
+      {error && <div className="error">Could not reach the API: {error}</div>}
+      {!error && !resp && <div className="loading"><span className="spinner" />Loading...</div>}
+      {!error && resp && (
+        <>
+          <div className="next-pick-header">
+            {resp.next_pick !== null ? (
+              <span>
+                Pick <strong>{resp.current_pick}</strong> → your next is{' '}
+                <strong>{resp.next_pick}</strong> ({resp.picks_away} away)
+              </span>
+            ) : (
+              <span>No more picks left for you this draft.</span>
+            )}
+            <span className="hedge-window-note">Hedge window: {resp.hedge_window}</span>
+          </div>
+
+          <label className="preview-pick-input" title="Preview availability at a different pick than your own next one.">
+            Preview pick
+            <input
+              type="number"
+              placeholder={resp.next_pick !== null ? String(resp.next_pick) : '—'}
+              value={targetPickOverride}
+              onChange={(e) => setTargetPickOverride(e.target.value)}
+            />
+            {targetPickOverride.trim() !== '' && (
+              <button type="button" onClick={() => setTargetPickOverride('')}>
+                Reset to my next pick
+              </button>
+            )}
+          </label>
+
+          {resp.target_pick !== null && resp.target_pick !== resp.next_pick && (
+            <p className="settings-note">Showing availability at pick {resp.target_pick}.</p>
+          )}
+
+          <div className="next-pick-columns">
+            <div>
+              <h3 className="take-now-heading">Take now</h3>
+              <p className="next-pick-subhead">He will not be there.</p>
+              <NextPickTable rows={resp.take_now} />
+            </div>
+            <div>
+              <h3 className="can-wait-heading">Can wait</h3>
+              <p className="next-pick-subhead">Take someone else first.</p>
+              <NextPickTable rows={resp.can_wait} />
+            </div>
+          </div>
+
+          {resp.tier_depletion.length > 0 && (
+            <div className="tier-depletion">
+              <h3>Tier depletion</h3>
+              <ul>
+                {resp.tier_depletion.map((t) => (
+                  <li key={t.position}>
+                    {t.position} tier {t.tier}: <strong>{t.remaining}</strong> left
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function NextPickTable({ rows }: { rows: NextPickResponse['take_now'] }) {
+  if (rows.length === 0) return <p className="next-pick-empty">—</p>;
+  return (
+    <table className="next-pick-table">
+      <thead>
+        <tr>
+          <th>Player</th>
+          <th>Value</th>
+          <th>P(available)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r) => (
+          <tr key={r.player_id}>
+            <td>{r.name} <span className="next-pick-pos">{r.position}</span></td>
+            <td>{r.our_value.toFixed(1)}</td>
+            <td>{(r.availability * 100).toFixed(0)}%</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}

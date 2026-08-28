@@ -90,6 +90,44 @@ class SimulateRequest(LeagueSettingsRequest):
     n_sims: int = 100
 
 
+class NextPickRequest(LeagueSettingsRequest):
+    gone: List[str] = []   # player_ids taken by anyone (includes `mine`)
+    mine: List[str] = []   # player_ids I've drafted -- drives roster need
+    current_pick: int = 1  # overall pick number happening right now
+    # Which overall pick to compute availability for. None (the default)
+    # means "my own next pick" -- the header's own framing. A future round-
+    # chip click in DraftPosition will pass an explicit overall pick here to
+    # preview availability at THAT pick instead; same endpoint, same
+    # availability(df, pick) call, just a different target.
+    target_pick: Optional[int] = None
+
+
+class NextPickPlayerRow(BaseModel):
+    player_id: str
+    name: str
+    position: str
+    team: str
+    our_value: float
+    availability: float   # P(still on the board at `next_pick`), 0..1
+
+
+class TierDepletionRow(BaseModel):
+    position: str
+    tier: int
+    remaining: int
+
+
+class NextPickResponse(BaseModel):
+    current_pick: int
+    next_pick: Optional[int] = None    # YOUR own next pick, always -- what the header names
+    picks_away: Optional[int] = None   # gap from current_pick to next_pick
+    target_pick: Optional[int] = None  # the pick take_now/can_wait were actually computed for
+    hedge_window: int
+    take_now: List[NextPickPlayerRow]    # availability < 50% at target_pick -- won't be there
+    can_wait: List[NextPickPlayerRow]    # availability >= 50% at target_pick -- take someone else first
+    tier_depletion: List[TierDepletionRow]
+
+
 class StrategyResultRow(BaseModel):
     strategy: str
     champ_pct: float
