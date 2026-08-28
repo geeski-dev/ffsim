@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { LeagueSettings, ModelInfluence, Variance } from '../api/types';
 import Tooltip from './Tooltip';
+import CollapseChevron from './CollapseChevron';
 
 interface Props {
   settings: LeagueSettings;
@@ -65,15 +66,20 @@ export default function SettingsPanel({ settings, onChange, onReset, draftMode, 
     <div className="panel settings-bar">
       <div className="panel-header">
         <h2>Settings</h2>
-        <button
-          type="button"
-          className="collapse-toggle"
-          aria-expanded={!collapsed}
-          aria-label={collapsed ? 'Expand settings' : 'Collapse settings'}
-          onClick={() => onCollapsedChange(!collapsed)}
-        >
-          <span aria-hidden="true">{collapsed ? 'v' : '^'}</span>
-        </button>
+        <div className="panel-header-actions">
+          <button type="button" className="reset-settings" onClick={onReset}>
+            Reset settings
+          </button>
+          <button
+            type="button"
+            className="collapse-toggle"
+            aria-expanded={!collapsed}
+            aria-label={collapsed ? 'Expand settings' : 'Collapse settings'}
+            onClick={() => onCollapsedChange(!collapsed)}
+          >
+            <CollapseChevron collapsed={collapsed} />
+          </button>
+        </div>
       </div>
 
       {/* Row 1: the two knobs -- what the user actually touches, and the
@@ -118,9 +124,6 @@ export default function SettingsPanel({ settings, onChange, onReset, draftMode, 
           </label>
         )}
 
-        <button type="button" className="reset-settings" onClick={onReset}>
-          Reset settings
-        </button>
       </div>
 
       {!collapsed && (

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { PickChip } from '../api/types';
 import Tooltip from './Tooltip';
+import CollapseChevron from './CollapseChevron';
 
 interface Props {
   picks: PickChip[];
@@ -29,7 +30,7 @@ export default function DraftPosition({
           aria-label={collapsed ? 'Expand draft position' : 'Collapse draft position'}
           onClick={() => setCollapsed(!collapsed)}
         >
-          <span aria-hidden="true">{collapsed ? 'v' : '^'}</span>
+          <CollapseChevron collapsed={collapsed} />
         </button>
       </div>
       {!collapsed && (

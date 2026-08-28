@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { PositionScarcityRow } from '../api/types';
 import Tooltip from './Tooltip';
+import CollapseChevron from './CollapseChevron';
 
 interface Props {
   rows: PositionScarcityRow[];
@@ -20,7 +21,7 @@ export default function ScarcityTable({ rows }: Props) {
           aria-label={collapsed ? 'Expand positional scarcity' : 'Collapse positional scarcity'}
           onClick={() => setCollapsed(!collapsed)}
         >
-          <span aria-hidden="true">{collapsed ? 'v' : '^'}</span>
+          <CollapseChevron collapsed={collapsed} />
         </button>
       </div>
       {!collapsed && (
