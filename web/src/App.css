@@ -35,11 +35,17 @@ th[title] { text-decoration: underline dotted var(--rule); text-underline-offset
 .bargain-negative { color: var(--bargain-negative); font-weight: 600; }
 .bargain-null { color: var(--ink-mute); }
 
-.boom-bust { display: inline-flex; align-items: center; gap: 6px; }
-.boom-bust-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
-.boom-bust-steady .boom-bust-dot { background: var(--steady); }
-.boom-bust-balanced .boom-bust-dot { background: var(--ink-mute); }
-.boom-bust-volatile .boom-bust-dot { background: var(--tertiary); }
+.settings-note { font-size: 0.82rem; color: var(--ink-mute); line-height: 1.4; margin: -4px 0 12px; }
+
+.reshuffle-banner {
+  font-size: 0.88rem; color: var(--ink); background: var(--surface-alt);
+  border: 1px solid var(--rule); border-radius: 6px; padding: 8px 12px; margin-bottom: 10px;
+}
+.reshuffle-banner strong { color: var(--primary); }
+
+@media (prefers-reduced-motion: reduce) {
+  tbody tr { transition: none !important; transform: none !important; }
+}
 
 .pick-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .pick-chip { border: 1px solid var(--rule); border-radius: 6px; padding: 6px 10px; text-align: center; min-width: 50px; background: var(--surface-alt); }

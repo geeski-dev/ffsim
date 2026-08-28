@@ -1,4 +1,4 @@
-import type { LeagueSettings, RiskProfile } from '../api/types';
+import type { LeagueSettings, ModelInfluence, Variance } from '../api/types';
 
 interface Props {
   settings: LeagueSettings;
@@ -13,11 +13,19 @@ const SCORING_OPTIONS: { value: LeagueSettings['scoring']; label: string }[] = [
 
 const LINEUP_POSITIONS = ['QB', 'RB', 'WR', 'TE', 'FLEX'] as const;
 
-const RISK_PROFILE_OPTIONS: { value: RiskProfile; label: string }[] = [
-  { value: 'safe', label: 'Play it safe' },
-  { value: 'balanced', label: 'Balanced' },
-  { value: 'ceiling', label: 'Chase upside' },
-  { value: 'max_ceiling', label: 'Full send' },
+const VARIANCE_OPTIONS: { value: Variance; label: string }[] = [
+  { value: 'Low', label: 'Low' },
+  { value: 'Medium', label: 'Medium' },
+  { value: 'High', label: 'High' },
+  { value: 'Extreme', label: 'Extreme' },
+];
+
+const MODEL_INFLUENCE_OPTIONS: { value: ModelInfluence; label: string }[] = [
+  { value: 'Off', label: 'Off (consensus board)' },
+  { value: 'Low', label: 'Low' },
+  { value: 'Medium', label: 'Medium' },
+  { value: 'High', label: 'High' },
+  { value: 'Extreme', label: 'Extreme (our board)' },
 ];
 
 export default function SettingsPanel({ settings, onChange }: Props) {
@@ -115,17 +123,35 @@ export default function SettingsPanel({ settings, onChange }: Props) {
         />
       </label>
 
-      <label>
-        Risk profile
+      <label title="How much ceiling to chase in our own valuation, and how hard we penalize a steep floor collapse. Independent of Model Influence below — this shapes OUR number, not how much of it you see.">
+        Variance
         <select
-          value={settings.risk_profile}
-          onChange={(e) => update({ risk_profile: e.target.value as LeagueSettings['risk_profile'] })}
+          value={settings.variance}
+          onChange={(e) => update({ variance: e.target.value as LeagueSettings['variance'] })}
         >
-          {RISK_PROFILE_OPTIONS.map((opt) => (
+          {VARIANCE_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>{opt.label}</option>
           ))}
         </select>
       </label>
+
+      <label title="How much of our own valuation to act on. At Off you're looking at the consensus board — the market's ordering, arranged for your league's roster and scoring.">
+        Model Influence
+        <select
+          value={settings.model_influence}
+          onChange={(e) => update({ model_influence: e.target.value as LeagueSettings['model_influence'] })}
+        >
+          {MODEL_INFLUENCE_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+      </label>
+      {settings.model_influence === 'Off' && (
+        <p className="settings-note">
+          Off shows the consensus board. We aren't asserting we're right — that's the only
+          setting whose behavior has actually been measured.
+        </p>
+      )}
     </div>
   );
 }

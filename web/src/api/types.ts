@@ -8,7 +8,8 @@ export interface LineupSettings {
 
 export type ScoringMode = 'half_ppr' | 'ppr' | 'standard';
 
-export type RiskProfile = 'safe' | 'balanced' | 'ceiling' | 'max_ceiling';
+export type Variance = 'Low' | 'Medium' | 'High' | 'Extreme';
+export type ModelInfluence = 'Off' | 'Low' | 'Medium' | 'High' | 'Extreme';
 
 export interface LeagueSettings {
   teams: number;
@@ -18,7 +19,8 @@ export interface LeagueSettings {
   lineup: LineupSettings;
   playoff_teams: number;
   reserved_slots: number;
-  risk_profile: RiskProfile;
+  variance: Variance;
+  model_influence: ModelInfluence;
 }
 
 export interface PickChip {
@@ -40,11 +42,13 @@ export interface PlayerRow {
   position: string;
   team: string;
   adp: number;
-  vor: number;
-  alpha: number | null;
-  tier: number;
-  weekly_cv: number;
-  draft_score: number;
+  expert_rank: number | null;
+  expert_rank_lo: number | null;
+  expert_rank_hi: number | null;
+  our_value: number;
+  our_range_lo: number;
+  our_range_hi: number;
+  bargain: number | null;
 }
 
 export interface LeagueResponse {

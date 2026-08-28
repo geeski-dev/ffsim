@@ -17,7 +17,8 @@ const DEFAULT_SETTINGS: LeagueSettings = {
   lineup: { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1 },
   playoff_teams: 4,
   reserved_slots: 2,
-  risk_profile: 'balanced',
+  variance: 'Medium',
+  model_influence: 'Off',
 };
 
 const DEBOUNCE_MS = 300;
@@ -57,9 +58,10 @@ export default function App() {
       </div>
       <p className="tagline">Find the mispriced players, not the good ones.</p>
       <p className="intro">
-        Most draft tools rank players. This one prices them. <strong>Value</strong> is how many points a
-        player scores above a freely-available replacement at his position; <strong>Bargain</strong> is how
-        much cheaper he is than that value deserves.
+        Most draft tools rank players. This one prices them, and shows you both prices side by side.{' '}
+        <strong>Expert</strong> is the analyst consensus; <strong>Our Value</strong> is how many points a
+        player scores above a freely-available replacement at his position, at whatever Variance and Model
+        Influence you've set; <strong>Bargain</strong> is how much cheaper he is than that value deserves.
       </p>
       <div className="columns">
         <div className="column-left">
@@ -83,7 +85,11 @@ export default function App() {
                 totalRounds={league.total_rounds}
               />
               <ScarcityTable rows={league.scarcity} />
-              <PlayerBoard players={league.players} riskProfile={settings.risk_profile} />
+              <PlayerBoard
+                players={league.players}
+                variance={settings.variance}
+                modelInfluence={settings.model_influence}
+              />
             </>
           )}
         </div>
