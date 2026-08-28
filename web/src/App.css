@@ -114,13 +114,14 @@
 .settings-bar { padding: 8px 16px; margin-bottom: 24px; }
 .settings-bar .panel-header { margin-bottom: 10px; }
 .settings-row { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 16px; }
-.settings-row-knobs { margin-bottom: 10px; }
+.settings-row-knobs { gap: 16px 28px; margin-bottom: 10px; }
 .settings-row-knobs .reset-settings { margin-left: auto; width: auto; }
 
-.settings-field { display: flex; flex-direction: row; align-items: center; gap: 6px; min-width: 0; }
-.settings-field label { font-size: 0.75rem; font-weight: 600; color: var(--ink-mute); white-space: nowrap; }
+.settings-field { display: flex; flex-direction: row; align-items: center; gap: 4px; min-width: 0; }
+.settings-field .tooltip-wrap { margin-left: 0; margin-right: 4px; }
+.settings-field label { font-size: 0.82rem; font-weight: 600; color: var(--ink-mute); white-space: nowrap; }
 .settings-field select, .settings-field input[type="number"] {
-  padding: 3px 6px; font-weight: normal; font-size: 0.9rem;
+  padding: 3px 6px; font-weight: normal; font-size: 0.82rem;
   background: var(--surface-alt); color: var(--ink); border: 1px solid var(--rule); border-radius: 4px;
 }
 .settings-field-narrow input { width: 44px; }
@@ -129,10 +130,10 @@
 .lineup-steppers { display: flex; gap: 8px; }
 .lineup-stepper {
   display: flex !important; flex-direction: row !important; align-items: center; gap: 4px;
-  font-size: 0.75rem !important; font-weight: 600 !important; color: var(--ink-mute); margin: 0 !important;
+  font-size: 0.82rem !important; font-weight: 600 !important; color: var(--ink-mute); margin: 0 !important;
 }
 .lineup-stepper input {
-  width: 36px; text-align: center; padding: 3px 2px; font-size: 0.9rem;
+  width: 36px; text-align: center; padding: 3px 2px; font-size: 0.82rem;
   background: var(--surface-alt); color: var(--ink); border: 1px solid var(--rule); border-radius: 4px;
 }
 
@@ -163,8 +164,30 @@ tbody tr:hover { background: color-mix(in srgb, var(--primary) 9%, transparent);
 }
 .reset-settings:hover { background: var(--primary); color: var(--ground); }
 
-.knob-lock-toggle { display: flex !important; align-items: center; gap: 6px; font-weight: normal !important; }
-.knob-lock-toggle input { width: auto !important; margin: 0; }
+.knob-lock-toggle {
+  position: relative; display: flex !important; align-items: center; gap: 7px;
+  color: var(--ink); font-size: 0.82rem; font-weight: 600 !important; cursor: pointer;
+}
+.knob-lock-toggle input {
+  position: absolute; opacity: 0; inline-size: 1px; block-size: 1px; margin: 0;
+}
+.knob-lock-switch {
+  position: relative; width: 32px; height: 18px; border: 1px solid var(--rule); border-radius: 999px;
+  background: var(--surface-alt); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+}
+.knob-lock-switch::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%;
+  background: var(--ink-mute); transition: transform 160ms ease, background 160ms ease;
+}
+.knob-lock-toggle input:checked + .knob-lock-switch {
+  border-color: var(--primary); background: color-mix(in srgb, var(--primary) 18%, var(--surface-alt));
+}
+.knob-lock-toggle input:checked + .knob-lock-switch::after {
+  transform: translateX(14px); background: var(--primary);
+}
+.knob-lock-toggle input:focus-visible + .knob-lock-switch {
+  outline: 2px solid var(--primary); outline-offset: 2px;
+}
 
 .draft-status-panel { margin-top: 16px; }
 .reset-draft {

@@ -112,7 +112,8 @@ export default function SettingsPanel({ settings, onChange, onReset, draftMode, 
         {draftMode && (
           <label className="knob-lock-toggle">
             <input type="checkbox" checked={unlocked} onChange={(e) => setUnlocked(e.target.checked)} />
-            Unlock
+            <span className="knob-lock-switch" aria-hidden="true" />
+            <span>Unlock</span>
           </label>
         )}
 
