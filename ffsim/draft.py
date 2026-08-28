@@ -181,6 +181,61 @@ class Strategy:
     ev_cap: float = 0.10             # max fraction of best-available VOR surrendered early
     swing_picks: tuple = ()          # overall pick numbers where ceiling_weight doubles
 
+    def value_components(self, board: pd.DataFrame, overall: int = 0) -> Dict[str, np.ndarray]:
+        """The model's per-player value, independent of roster context.
+
+        No positional need bonus, no legality/EV-cap masking -- those only
+        mean anything mid-draft. This is the one place the model_influence
+        blend and the ceiling/risk/downside score are computed, shared by
+        choose() (which adds roster context on top) and by any static-board
+        caller, e.g. the API's player valuation table, so there is exactly
+        one implementation of the blend math to keep in sync.
+        """
+        vor = board["vor"].to_numpy()
+        vor_p85 = board["vor_p85"].to_numpy()
+        vor_p15 = board["vor_p15"].to_numpy()
+        mi = self.model_influence
+        if mi == 1.0 or "market_implied_vor" not in board.columns:
+            effective_vor = vor
+            effective_vor_p85 = vor_p85
+            effective_vor_p15 = vor_p15
+        else:
+            market = board["market_implied_vor"].to_numpy()
+            priced = np.isfinite(market)
+            effective_vor = np.where(priced, market + mi * (vor - market), vor)
+            # Anchor the floor/ceiling to the (possibly market-shifted) center
+            # and add back the model's OWN raw upside/downside gap, rather
+            # than blending vor_p85/vor_p15 independently toward the same
+            # flat market scalar. The latter (Stage 1's original approach)
+            # collapses vor/vor_p85/vor_p15 onto one number the moment
+            # mi=0.0 -- there is only one market_implied_vor, not a separate
+            # market-implied p85/p15 -- which would make ceiling_weight and
+            # downside_weight (Variance) silent no-ops at model_influence
+            # "Off", contradicting the requirement that Variance stay fully
+            # active there (chasing ceiling among market-priced players is
+            # untested and unrejected; Off must not disable testing it).
+            # Bit-identical with the old formula at mi=1.0 (gap added to
+            # vor itself) and at mi=0.0 on unpriced rows (gap added to vor).
+            effective_vor_p85 = np.where(priced, effective_vor + (vor_p85 - vor), vor_p85)
+            effective_vor_p15 = np.where(priced, effective_vor - (vor - vor_p15), vor_p15)
+
+        cw = self.ceiling_weight
+        if overall in self.swing_picks:
+            cw = min(1.0, cw * 2.0)
+        blended = (1 - cw) * effective_vor + cw * effective_vor_p85
+
+        risk = board["risk_index"].to_numpy() * self.risk_penalty * 10.0
+        # size of the floor collapse, not its level -- vor is already in the
+        # blended term, so this must not double-count it
+        downside = (effective_vor - effective_vor_p15) * self.downside_weight
+
+        return {
+            "effective_vor": effective_vor,
+            "effective_vor_p85": effective_vor_p85,
+            "effective_vor_p15": effective_vor_p15,
+            "score": blended - risk - downside,
+        }
+
     def choose(self, board: pd.DataFrame, avail: np.ndarray,
                counts: Dict[str, int], league: League, picks_left: int,
                recent: Sequence[str], rng, overall: int = 0,
@@ -202,34 +257,13 @@ class Strategy:
                 if mask.any():
                     legal = mask
 
-        vor = board["vor"].to_numpy()
-        vor_p85 = board["vor_p85"].to_numpy()
-        vor_p15 = board["vor_p15"].to_numpy()
-        mi = self.model_influence
-        if mi == 1.0 or "market_implied_vor" not in board.columns:
-            effective_vor = vor
-            effective_vor_p85 = vor_p85
-            effective_vor_p15 = vor_p15
-        else:
-            market = board["market_implied_vor"].to_numpy()
-            priced = np.isfinite(market)
-            effective_vor = np.where(priced, market + mi * (vor - market), vor)
-            effective_vor_p85 = np.where(priced, market + mi * (vor_p85 - market), vor_p85)
-            effective_vor_p15 = np.where(priced, market + mi * (vor_p15 - market), vor_p15)
-
-        cw = self.ceiling_weight
-        if overall in self.swing_picks:
-            cw = min(1.0, cw * 2.0)
-        blended = (1 - cw) * effective_vor + cw * effective_vor_p85
+        comp = self.value_components(board, overall)
+        effective_vor = comp["effective_vor"]
 
         bonus = np.array([self.pos_bonus.get(p, 0.0) for p in pos])
         need = np.array([_need_bonus(p, counts, league, picks_left) for p in pos])
-        risk = board["risk_index"].to_numpy() * self.risk_penalty * 10.0
-        # size of the floor collapse, not its level -- vor is already in the
-        # blended term, so this must not double-count it
-        downside = (effective_vor - effective_vor_p15) * self.downside_weight
 
-        score = blended + bonus + need * 0.6 - risk - downside
+        score = comp["score"] + bonus + need * 0.6
 
         # EV sacrifice cap: in the early rounds you may only chase upside among
         # players whose median value is within ev_cap of the best available.
@@ -260,6 +294,45 @@ PRESETS: Dict[str, Strategy] = {
     # large negative bonus produces a roster that cannot fill its lineup
     "zero_rb":   Strategy("zero_rb", ceiling_weight=0.4, pos_bonus={"RB": -12.0, "WR": 6.0}, ev_cap=0.20),
     "hero_rb":   Strategy("hero_rb", ceiling_weight=0.4, pos_bonus={"RB": 10.0}, ev_cap=0.15),
+}
+
+
+# --------------------------------------------------------------------------
+# the app's two knobs: Variance and Model Influence
+# --------------------------------------------------------------------------
+# Separate from PRESETS above -- PRESETS are named whole-strategy recipes
+# used by the backtest/simulator; these are the two independent dials the
+# web app exposes. risk_penalty is deliberately NOT part of the Variance
+# table: it is held constant at 0.25 for every level. Measured reason: the
+# "safe" preset (risk_penalty=1.2) is dominated on BOTH axes by max_ceiling
+# in the stage-5 backtest sweep -- fewer titles (4.79% vs 7.71%) and MORE
+# bottom-three finishes (44.4% vs 39.8%) -- because injury risk correlates
+# with being good (McCaffrey's miss_rate sits at the top of the top 16), so
+# a large risk penalty doesn't buy safety, it buys avoiding elite players.
+# Putting risk_penalty on this knob would make "Low" produce more disasters,
+# not fewer.
+VARIANCE_LEVELS: Dict[str, Strategy] = {
+    "Low":     Strategy("Low", ceiling_weight=0.0, risk_penalty=0.25, downside_weight=0.35, ev_cap=0.05),
+    "Medium":  Strategy("Medium", ceiling_weight=0.3, risk_penalty=0.25, downside_weight=0.20, ev_cap=0.10),
+    "High":    Strategy("High", ceiling_weight=0.7, risk_penalty=0.25, downside_weight=0.10, ev_cap=0.20),
+    "Extreme": Strategy("Extreme", ceiling_weight=1.0, risk_penalty=0.25, downside_weight=0.00, ev_cap=0.35),
+}
+
+# swing_picks is a set of OVERALL pick numbers -- inherently specific to a
+# league (team count and draft slot), so it can't be baked into a static
+# preset here. This flag says which variance levels want it turned on; the
+# caller (the API, once it has a real League) fills in the actual pick
+# numbers via dataclasses.replace(..., swing_picks=tuple(league.pick_numbers())).
+VARIANCE_SWING_ENABLED: Dict[str, bool] = {
+    "Low": False, "Medium": False, "High": False, "Extreme": True,
+}
+
+# Off = look at the market's own board, Extreme = look at only ours. Applied
+# via Strategy.model_influence (see value_components). The API defaults to
+# "Off" -- see the app's own "do not" list: no evidence the model beats the
+# market, so the default must not assert otherwise.
+MODEL_INFLUENCE_LEVELS: Dict[str, float] = {
+    "Off": 0.0, "Low": 0.25, "Medium": 0.5, "High": 0.75, "Extreme": 1.0,
 }
 
 

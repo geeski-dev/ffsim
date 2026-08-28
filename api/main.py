@@ -7,6 +7,7 @@ Two endpoints with very different cost profiles:
 The player pools are loaded from static CSVs (data/players_*.csv), so they are
 read once at import time and reused across every request.
 """
+import dataclasses
 import math
 import sys
 from pathlib import Path
@@ -69,6 +70,25 @@ def build_league(settings: LeagueSettingsRequest) -> ff.League:
         raise HTTPException(status_code=400, detail=str(exc))
 
 
+def build_strategy(settings: LeagueSettingsRequest, league: "ff.League") -> ff.Strategy:
+    """The Variance + Model Influence dropdowns, resolved into one Strategy.
+
+    risk_penalty is intentionally NOT read from settings -- it is fixed at
+    0.25 inside every ffsim.draft.VARIANCE_LEVELS entry (see that table's own
+    comment for why it is not on this knob). swing_picks is the one field
+    VARIANCE_LEVELS can't bake in statically, since "overall pick numbers"
+    only mean something once teams/slot are known -- filled in here, only at
+    the "Extreme" variance level (ff.VARIANCE_SWING_ENABLED), from this
+    request's own League.
+    """
+    strategy = ff.VARIANCE_LEVELS[settings.variance]
+    strategy = dataclasses.replace(
+        strategy, model_influence=ff.MODEL_INFLUENCE_LEVELS[settings.model_influence])
+    if ff.VARIANCE_SWING_ENABLED[settings.variance]:
+        strategy = dataclasses.replace(strategy, swing_picks=tuple(league.pick_numbers()))
+    return strategy
+
+
 @app.post("/api/league", response_model=LeagueResponse)
 def api_league(settings: LeagueSettingsRequest) -> LeagueResponse:
     league = build_league(settings)
@@ -87,11 +107,16 @@ def api_league(settings: LeagueSettingsRequest) -> LeagueResponse:
         for pos in sorted(repl)
     ]
 
-    ceiling_weight = ff.PRESETS[settings.risk_profile].ceiling_weight
+    strategy = build_strategy(settings, league)
+    mi = ff.MODEL_INFLUENCE_LEVELS[settings.model_influence]
+    comp = strategy.value_components(board)
     board = board.copy()
-    board["draft_score"] = (1 - ceiling_weight) * board["vor"] + ceiling_weight * board["vor_p85"]
+    board["our_value"] = comp["score"]
+    board["our_range_lo"] = comp["effective_vor_p15"]
+    board["our_range_hi"] = comp["effective_vor_p85"]
+    board["bargain"] = mi * board["alpha"]
 
-    top = board.sort_values("draft_score", ascending=False).head(150)
+    top = board.sort_values("our_value", ascending=False).head(150)
     players = [
         PlayerRow(
             player_id=row.player_id,
@@ -99,11 +124,13 @@ def api_league(settings: LeagueSettingsRequest) -> LeagueResponse:
             position=row.position,
             team=row.team,
             adp=round(row.adp, 1),
-            vor=round(row.vor, 1),
-            alpha=None if math.isnan(row.alpha) else round(row.alpha, 1),
-            tier=int(row.tier),
-            weekly_cv=round(row.weekly_cv, 3),
-            draft_score=round(row.draft_score, 1),
+            expert_rank=None if math.isnan(row.expert_rank) else round(row.expert_rank, 1),
+            expert_rank_lo=None if math.isnan(row.expert_rank_lo) else round(row.expert_rank_lo, 1),
+            expert_rank_hi=None if math.isnan(row.expert_rank_hi) else round(row.expert_rank_hi, 1),
+            our_value=round(row.our_value, 1),
+            our_range_lo=round(row.our_range_lo, 1),
+            our_range_hi=round(row.our_range_hi, 1),
+            bargain=None if math.isnan(row.bargain) else round(row.bargain, 1),
         )
         for row in top.itertuples()
     ]

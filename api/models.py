@@ -25,7 +25,15 @@ class LeagueSettingsRequest(BaseModel):
     lineup: LineupSettings = LineupSettings()
     playoff_teams: int = 4
     reserved_slots: int = 2
-    risk_profile: Literal["safe", "balanced", "ceiling", "max_ceiling"] = "balanced"
+    # How much upside to chase in the model's own valuation. Independent of
+    # model_influence below -- this shapes OUR number, model_influence
+    # decides how much of our number vs. the market's you actually see.
+    variance: Literal["Low", "Medium", "High", "Extreme"] = "Medium"
+    # Defaults OFF: no backtest to date shows the model beating the market
+    # (see ffsim.draft.MODEL_INFLUENCE_LEVELS), so the shipped default must
+    # not assert otherwise. Off = pure consensus board, arranged for your
+    # league; Extreme = pure model valuation.
+    model_influence: Literal["Off", "Low", "Medium", "High", "Extreme"] = "Off"
 
 
 class PickChip(BaseModel):
@@ -47,11 +55,22 @@ class PlayerRow(BaseModel):
     position: str
     team: str
     adp: float
-    vor: float
-    alpha: Optional[float] = None
-    tier: int
-    weekly_cv: float
-    draft_score: float
+    # Expert consensus (median of individual FantasyPros rankers, Fantasy
+    # Pros' own aggregate excluded -- see build_pool.py). Null together for a
+    # player without 6+ individual rankers; render as an em-dash, not 0.
+    expert_rank: Optional[float] = None
+    expert_rank_lo: Optional[float] = None
+    expert_rank_hi: Optional[float] = None
+    # "Ours": the model's own value estimate at the requested Variance /
+    # Model Influence combination, and the floor-ceiling band behind it.
+    our_value: float
+    our_range_lo: float
+    our_range_hi: float
+    # model_influence * alpha -- see Strategy.value_components. At
+    # model_influence="Off" this is exactly 0.0 for every priced player by
+    # construction: it states plainly that nothing here asserts the model
+    # beats the market. Null for players with no market price to compare to.
+    bargain: Optional[float] = None
 
 
 class LeagueResponse(BaseModel):
