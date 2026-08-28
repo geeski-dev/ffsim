@@ -28,6 +28,7 @@ interface PopoverPosition {
 
 const GAP = 6;
 const VIEWPORT_MARGIN = 8;
+const CLOSE_DELAY_MS = 200;
 
 // One component, used everywhere a term needs explaining -- same shape,
 // size and styling regardless of where it's dropped in. Hover OR focus
@@ -43,6 +44,7 @@ export default function Tooltip({ id, label }: Props) {
   const wrapRef = useRef<HTMLSpanElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLSpanElement>(null);
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [position, setPosition] = useState<PopoverPosition | null>(null);
 
   const updatePosition = useCallback(() => {
@@ -68,8 +70,28 @@ export default function Tooltip({ id, label }: Props) {
   }, []);
 
   function close() {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
     setOpen(false);
     setPosition(null);
+  }
+
+  function openNow() {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+    setOpen(true);
+  }
+
+  function closeAfterDelay() {
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = setTimeout(() => {
+      closeTimerRef.current = null;
+      close();
+    }, CLOSE_DELAY_MS);
   }
 
   function containsTarget(target: EventTarget | null) {
@@ -121,9 +143,15 @@ export default function Tooltip({ id, label }: Props) {
     };
   }, [open, updatePosition]);
 
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    };
+  }, []);
+
   function handleWrapperMouseLeave(e: ReactMouseEvent) {
     if (containsFocus()) return;
-    if (!containsTarget(e.relatedTarget)) close();
+    if (!containsTarget(e.relatedTarget)) closeAfterDelay();
   }
 
   const popover = open ? (
@@ -135,10 +163,10 @@ export default function Tooltip({ id, label }: Props) {
         top: position ? `${position.top}px` : undefined,
         visibility: position ? 'visible' : 'hidden',
       }}
-      onMouseEnter={() => setOpen(true)}
+      onMouseEnter={openNow}
       onMouseLeave={(e) => {
         if (containsFocus()) return;
-        if (!containsTarget(e.relatedTarget)) close();
+        if (!containsTarget(e.relatedTarget)) closeAfterDelay();
       }}
     >
       <span className="tooltip-text" id={descId}>{entry.short}</span>
@@ -160,7 +188,7 @@ export default function Tooltip({ id, label }: Props) {
     <span
       className="tooltip-wrap"
       ref={wrapRef}
-      onMouseEnter={() => setOpen(true)}
+      onMouseEnter={openNow}
       onMouseLeave={handleWrapperMouseLeave}
       onBlur={handleBlur}
       onKeyDown={handleKeyDown}
@@ -180,7 +208,7 @@ export default function Tooltip({ id, label }: Props) {
           e.stopPropagation();
           setOpen(true);
         }}
-        onFocus={() => setOpen(true)}
+        onFocus={openNow}
       >
         {label ? <span className="tooltip-trigger-label">{label}</span> : null}
         <span className="tooltip-glyph" aria-hidden="true">?</span>
