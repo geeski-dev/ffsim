@@ -57,6 +57,7 @@ STATS = ["pass_yds", "pass_td", "interceptions", "rush_yds", "rush_td",
 
 REQUIRED_OUT = (["player_id", "name", "position", "team", "bye_week"] + STATS +
                 ["adp", "adp_sd", "adp_min", "adp_max", "adp_is_estimated",
+                 "expert_rank", "expert_rank_lo", "expert_rank_hi",
                  "proj_games", "miss_rate", "weekly_cv", "proj_spread",
                  "up_spread", "down_spread"])
 
@@ -348,6 +349,44 @@ def build(directory: str, scoring: str) -> pd.DataFrame:
     out["adp_max"] = out["adp_max"].fillna(out["adp"] + 2.15 * out["adp_sd"])
     if n_fill:
         warn(f"adp_sd synthesised from projection spread for {n_fill} players")
+
+    # ---- expert rankings -----------------------------------------------
+    ranks = load(directory, "03_RANKINGS")
+    for c in ["expert_rank", "expert_rank_lo", "expert_rank_hi"]:
+        out[c] = np.nan
+    if ranks is not None:
+        needed = {"player_id", "ranker_name", "rank_overall"}
+        missing = needed - set(ranks.columns)
+        if missing:
+            warn(f"03_RANKINGS present but missing {sorted(missing)}")
+        else:
+            ranks = ranks.copy()
+            ranks = ranks[
+                ~ranks["ranker_name"].astype(str).eq("FantasyPros Expert Consensus")
+            ].copy()
+            ranks["_key"] = ranks["player_id"].map(norm_id)
+            ranks["rank_overall"] = pd.to_numeric(ranks["rank_overall"], errors="coerce")
+            ranks = ranks.dropna(subset=["rank_overall"])
+            agg = ranks.groupby("_key").agg(
+                expert_rank=("rank_overall", "median"),
+                expert_rank_lo=("rank_overall", "min"),
+                expert_rank_hi=("rank_overall", "max"),
+                n_rankers=("ranker_name", "nunique"),
+            )
+            n_ranked = len(agg)
+            agg.loc[agg["n_rankers"] < 6,
+                    ["expert_rank", "expert_rank_lo", "expert_rank_hi"]] = np.nan
+            n_floor = int((agg["n_rankers"] >= 6).sum())
+            joined_ranks = out["player_id"].map(agg["expert_rank"])
+            out["expert_rank"] = joined_ranks
+            out["expert_rank_lo"] = out["player_id"].map(agg["expert_rank_lo"])
+            out["expert_rank_hi"] = out["player_id"].map(agg["expert_rank_hi"])
+            joined = out["expert_rank"].notna().sum()
+            print(f"  expert rankings: {n_floor}/{n_ranked} ranked players clear "
+                  f"6-ranker floor; joined {joined}/{len(out)} pool players "
+                  f"({joined / len(out) * 100:.1f}%)")
+    else:
+        warn("03_RANKINGS unavailable — expert ranks left blank")
 
     # ---- weekly volatility ---------------------------------------------
     wk = load(directory, "06_WEEKLY")
