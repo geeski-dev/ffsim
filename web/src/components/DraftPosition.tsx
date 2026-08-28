@@ -17,7 +17,7 @@ interface Props {
 export default function DraftPosition({
   picks, hedgeWindow, selectedPick, onSelectPick,
 }: Props) {
-  const [collapsed, setCollapsed] = useState(true);
+  const [collapsed, setCollapsed] = useState(false);
 
   return (
     <div className="panel">
