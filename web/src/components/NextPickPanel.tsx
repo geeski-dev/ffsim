@@ -24,7 +24,12 @@ export default function NextPickPanel({ settings, gone, mine, currentPick, targe
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requestIdRef = useRef(0);
 
-  const parsedOverride = targetPick ?? undefined;
+  const lineupSlots = settings.lineup.QB + settings.lineup.RB + settings.lineup.WR + settings.lineup.TE + settings.lineup.FLEX;
+  const maxPreviewPick = settings.teams * (lineupSlots + settings.bench + settings.reserved_slots);
+  const minPreviewPick = Math.min(currentPick + 1, maxPreviewPick);
+  const parsedOverride = targetPick === null || !Number.isFinite(targetPick)
+    ? undefined
+    : Math.min(maxPreviewPick, Math.max(minPreviewPick, targetPick));
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -76,9 +81,16 @@ export default function NextPickPanel({ settings, gone, mine, currentPick, targe
             Preview pick
             <input
               type="number"
+              min={minPreviewPick}
+              max={maxPreviewPick}
               placeholder={resp.next_pick !== null ? String(resp.next_pick) : '—'}
               value={targetPick === null ? '' : String(targetPick)}
               onChange={(e) => onTargetPickChange(e.target.value.trim() === '' ? null : Number(e.target.value))}
+              onBlur={() => {
+                if (targetPick !== null && parsedOverride !== undefined && targetPick !== parsedOverride) {
+                  onTargetPickChange(parsedOverride);
+                }
+              }}
             />
             {targetPick !== null && (
               <button type="button" onClick={() => onTargetPickChange(null)}>
