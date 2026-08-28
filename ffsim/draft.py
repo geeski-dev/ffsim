@@ -175,6 +175,7 @@ class Strategy:
     ceiling_weight: float = 0.0      # 0 = draft the median, 1 = draft the 85th pct
     risk_penalty: float = 0.0        # points docked per SD of availability risk
     downside_weight: float = 0.0     # points docked per point of floor collapse (vor - vor_p15)
+    model_influence: float = 1.0     # 0 = market-implied value, 1 = model VOR
     pos_bonus: Dict[str, float] = field(default_factory=dict)
     early_rounds: int = 3
     ev_cap: float = 0.10             # max fraction of best-available VOR surrendered early
@@ -204,29 +205,40 @@ class Strategy:
         vor = board["vor"].to_numpy()
         vor_p85 = board["vor_p85"].to_numpy()
         vor_p15 = board["vor_p15"].to_numpy()
+        mi = self.model_influence
+        if mi == 1.0 or "market_implied_vor" not in board.columns:
+            effective_vor = vor
+            effective_vor_p85 = vor_p85
+            effective_vor_p15 = vor_p15
+        else:
+            market = board["market_implied_vor"].to_numpy()
+            priced = np.isfinite(market)
+            effective_vor = np.where(priced, market + mi * (vor - market), vor)
+            effective_vor_p85 = np.where(priced, market + mi * (vor_p85 - market), vor_p85)
+            effective_vor_p15 = np.where(priced, market + mi * (vor_p15 - market), vor_p15)
 
         cw = self.ceiling_weight
         if overall in self.swing_picks:
             cw = min(1.0, cw * 2.0)
-        blended = (1 - cw) * vor + cw * vor_p85
+        blended = (1 - cw) * effective_vor + cw * effective_vor_p85
 
         bonus = np.array([self.pos_bonus.get(p, 0.0) for p in pos])
         need = np.array([_need_bonus(p, counts, league, picks_left) for p in pos])
         risk = board["risk_index"].to_numpy() * self.risk_penalty * 10.0
         # size of the floor collapse, not its level -- vor is already in the
         # blended term, so this must not double-count it
-        downside = (vor - vor_p15) * self.downside_weight
+        downside = (effective_vor - effective_vor_p15) * self.downside_weight
 
         score = blended + bonus + need * 0.6 - risk - downside
 
         # EV sacrifice cap: in the early rounds you may only chase upside among
         # players whose median value is within ev_cap of the best available.
         if rnd <= self.early_rounds:
-            legal_vor = np.where(legal, vor, -np.inf)
+            legal_vor = np.where(legal, effective_vor, -np.inf)
             best = legal_vor.max()
             if np.isfinite(best):
                 floor = best - self.ev_cap * abs(best)
-                capped = legal & (vor >= floor)
+                capped = legal & (effective_vor >= floor)
                 if capped.any():
                     legal = capped
 
