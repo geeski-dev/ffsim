@@ -44,8 +44,8 @@ const COLUMNS: { key: SortKey; label: string; tooltip?: TooltipId }[] = [
   { key: 'adp', label: 'ADP', tooltip: 'adp' },
   { key: 'expert_rank', label: 'Expert', tooltip: 'expert' },
   { key: 'expert_rank_lo', label: 'Expert Range', tooltip: 'expert-range' },
-  { key: 'our_value', label: 'Our Value', tooltip: 'our-value' },
-  { key: 'our_range_lo', label: 'Our Range', tooltip: 'our-range' },
+  { key: 'our_value', label: 'Value', tooltip: 'our-value' },
+  { key: 'our_range_lo', label: 'Value Range', tooltip: 'our-range' },
   { key: 'bargain', label: 'Bargain', tooltip: 'bargain' },
 ];
 
@@ -254,6 +254,10 @@ export default function PlayerBoard({
     }
   }
 
+  function sortedColumnClass(key: SortKey, extra?: string): string | undefined {
+    return [sortKey === key && 'sorted-column', extra].filter(Boolean).join(' ') || undefined;
+  }
+
   return (
     <div className="panel">
       <h2>Player board</h2>
@@ -307,7 +311,7 @@ export default function PlayerBoard({
             <tr>
               {mode === 'draft' && <th className="mark-col">Mark</th>}
               {COLUMNS.map((col) => (
-                <th key={col.key} onClick={() => toggleSort(col.key)}>
+                <th key={col.key} className={sortedColumnClass(col.key)} onClick={() => toggleSort(col.key)}>
                   {col.label}
                   {col.tooltip && <Tooltip id={col.tooltip} />}
                   {col.key === 'bargain' && modelInfluence === 'Off' && (
@@ -349,24 +353,24 @@ export default function PlayerBoard({
                       )}
                     </td>
                   )}
-                  <td>{p.name}</td>
-                  <td>{p.position}</td>
-                  <td>{p.team}</td>
-                  <td>{p.adp.toFixed(1)}</td>
-                  <td className={p.expert_rank === null ? 'bargain-null' : undefined}>
+                  <td className={sortedColumnClass('name')}>{p.name}</td>
+                  <td className={sortedColumnClass('position')}>{p.position}</td>
+                  <td className={sortedColumnClass('team')}>{p.team}</td>
+                  <td className={sortedColumnClass('adp')}>{p.adp.toFixed(1)}</td>
+                  <td className={sortedColumnClass('expert_rank', p.expert_rank === null ? 'bargain-null' : undefined)}>
                     {p.expert_rank === null ? EM_DASH : p.expert_rank.toFixed(1)}
                   </td>
-                  <td className={p.expert_rank_lo === null ? 'bargain-null' : undefined}>
+                  <td className={sortedColumnClass('expert_rank_lo', p.expert_rank_lo === null ? 'bargain-null' : undefined)}>
                     {formatRange(p.expert_rank_lo, p.expert_rank_hi)}
                   </td>
-                  <td>{p.our_value.toFixed(1)}</td>
-                  <td>{formatRange(p.our_range_lo, p.our_range_hi)}</td>
+                  <td className={sortedColumnClass('our_value')}>{p.our_value.toFixed(1)}</td>
+                  <td className={sortedColumnClass('our_range_lo')}>{formatRange(p.our_range_lo, p.our_range_hi)}</td>
                   {modelInfluence === 'Off' ? (
-                    <td className="bargain-inactive">
+                    <td className={sortedColumnClass('bargain', 'bargain-inactive')}>
                       {p.alpha === null ? EM_DASH : formatSigned(p.alpha)}
                     </td>
                   ) : (
-                    <td className={p.bargain === null ? 'bargain-null' : p.bargain >= 0 ? 'bargain-positive' : 'bargain-negative'}>
+                    <td className={sortedColumnClass('bargain', p.bargain === null ? 'bargain-null' : p.bargain >= 0 ? 'bargain-positive' : 'bargain-negative')}>
                       {p.bargain === null ? EM_DASH : formatSigned(p.bargain)}
                     </td>
                   )}

@@ -147,6 +147,8 @@ th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--rule
 th { cursor: pointer; user-select: none; color: var(--ink-mute); font-weight: 600; }
 th[title] { text-decoration: underline dotted var(--rule); text-underline-offset: 3px; }
 tbody tr:hover { background: color-mix(in srgb, var(--primary) 9%, transparent); }
+th.sorted-column,
+td.sorted-column { background: color-mix(in srgb, var(--primary) 9%, transparent); }
 
 .bargain-positive { color: var(--bargain-positive); font-weight: 600; }
 .bargain-negative { color: var(--bargain-negative); font-weight: 600; }
