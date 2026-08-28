@@ -166,6 +166,13 @@ export default function App() {
       <div className="root">
         <Banner collapsed={mode === 'draft'} />
         <div className="app">
+          {mode !== 'about' && (
+            <p className="tagline">
+              Find the <strong className="tagline-chase">mispriced</strong> players, not the{' '}
+              <strong className="tagline-resist">good</strong> ones.
+            </p>
+          )}
+
           <nav className="nav-tabs" aria-label="Primary">
             <button type="button" className={mode === 'board' ? 'active' : ''} onClick={() => setMode('board')}>
               Board
@@ -183,10 +190,6 @@ export default function App() {
 
         {mode !== 'about' && (
           <>
-            <p className="tagline">
-              Find the <strong className="tagline-chase">mispriced</strong> players, not the{' '}
-              <strong className="tagline-resist">good</strong> ones.
-            </p>
             <SettingsPanel
               settings={settings}
               onChange={handleSettingsChange}
