@@ -49,6 +49,7 @@ export interface PlayerRow {
   our_range_lo: number;
   our_range_hi: number;
   bargain: number | null;
+  alpha: number | null;
 }
 
 export interface LeagueResponse {

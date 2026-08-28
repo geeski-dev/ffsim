@@ -7,46 +7,72 @@
   color: var(--ink); border-radius: 4px; cursor: pointer; font-weight: 600;
 }
 .mode-toggle button.active { background: var(--primary); color: var(--ground); border-color: var(--primary); }
-.app-header img { height: 36px; width: 36px; object-fit: contain; }
-.app-header h1 { margin: 0; font-size: 1.5rem; color: var(--ink); }
+.app-header img { height: 288px; width: 288px; object-fit: contain; }
 .tagline { margin: 0 0 20px; color: var(--ink-mute); font-size: 0.95rem; }
+.tagline-chase { color: var(--primary); }
+.tagline-resist { color: var(--bargain-negative); }
 
 .intro { color: var(--ink-mute); font-size: 0.95rem; line-height: 1.5; max-width: 900px; margin: 0 0 24px; }
 .intro strong { color: var(--ink); }
 
-.columns { display: flex; gap: 24px; align-items: flex-start; }
-.column-left { flex: 0 0 280px; }
-.column-right { flex: 1; display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+.board-area { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
 
-.panel { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 16px; color: var(--ink); }
+.panel { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 16px; color: var(--ink); margin-bottom: 24px; }
 .panel h2 { margin-top: 0; font-size: 1.1rem; color: var(--ink); }
 
-.settings-panel label { display: block; margin-bottom: 12px; font-size: 0.9rem; font-weight: 600; color: var(--ink); }
-.settings-panel select, .settings-panel input[type="number"] {
-  display: block; width: 100%; margin-top: 4px; padding: 6px; font-weight: normal;
+/* Settings bar -- horizontal, full width, same width as the board below it.
+   Target ~140px tall: two/three flex rows instead of a tall sidebar of
+   individually-labelled fields. Nothing here is hidden behind a disclosure. */
+.settings-bar { padding: 8px 16px; margin-bottom: 24px; }
+.settings-row { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 16px; }
+.settings-row-knobs { margin-bottom: 10px; }
+.settings-row-knobs .reset-settings { margin-left: auto; width: auto; }
+
+.settings-field { display: flex; flex-direction: row; align-items: center; gap: 6px; min-width: 0; }
+.settings-field label { font-size: 0.75rem; font-weight: 600; color: var(--ink-mute); white-space: nowrap; }
+.settings-field select, .settings-field input[type="number"] {
+  padding: 3px 6px; font-weight: normal; font-size: 0.9rem;
   background: var(--surface-alt); color: var(--ink); border: 1px solid var(--rule); border-radius: 4px;
 }
-fieldset { border: 1px solid var(--rule); border-radius: 6px; margin-bottom: 12px; }
-legend { color: var(--ink-mute); }
-.lineup-input { display: inline-block; width: 30%; margin-right: 4px; }
-.lineup-input input { width: 100%; }
+.settings-field-narrow input { width: 44px; }
+
+.lineup-field { flex: 1 1 auto; min-width: 260px; }
+.lineup-steppers { display: flex; gap: 8px; }
+.lineup-stepper {
+  display: flex !important; flex-direction: row !important; align-items: center; gap: 4px;
+  font-size: 0.75rem !important; font-weight: 600 !important; color: var(--ink-mute); margin: 0 !important;
+}
+.lineup-stepper input {
+  width: 36px; text-align: center; padding: 3px 2px; font-size: 0.9rem;
+  background: var(--surface-alt); color: var(--ink); border: 1px solid var(--rule); border-radius: 4px;
+}
+
+.draft-status-bar { display: flex; align-items: center; gap: 20px; padding: 10px 16px; }
+.draft-status-bar .stat { margin-bottom: 0; }
+.draft-status-bar .reset-draft { width: auto; margin-top: 0; margin-left: auto; }
 
 .table-scroll { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--rule); white-space: nowrap; font-variant-numeric: tabular-nums; }
 th { cursor: pointer; user-select: none; color: var(--ink-mute); font-weight: 600; }
 th[title] { text-decoration: underline dotted var(--rule); text-underline-offset: 3px; }
+tbody tr:hover { background: color-mix(in srgb, var(--primary) 9%, transparent); }
 
 .bargain-positive { color: var(--bargain-positive); font-weight: 600; }
 .bargain-negative { color: var(--bargain-negative); font-weight: 600; }
 .bargain-null { color: var(--ink-mute); }
+/* At Model Influence = Off, Bargain shows raw alpha, greyed and marked
+   inactive -- honest that nothing is being acted on, without going back to
+   showing an active-looking number. */
+.bargain-inactive { color: var(--ink-mute); font-style: italic; }
+.inactive-marker { font-style: italic; font-weight: normal; text-decoration: none; }
 
-.settings-note { font-size: 0.82rem; color: var(--ink-mute); line-height: 1.4; margin: -4px 0 12px; }
+.settings-note { font-size: 0.72rem; color: var(--ink-mute); line-height: 1.3; margin: 4px 0 10px; }
 .reset-settings {
-  width: 100%; padding: 8px 10px; border: 1px solid var(--rule); border-radius: 4px;
-  background: var(--surface-alt); color: var(--ink); font-weight: 600; cursor: pointer;
+  width: 100%; padding: 8px 10px; border: 1px solid var(--primary); border-radius: 4px;
+  background: transparent; color: var(--primary); font-weight: 600; cursor: pointer;
 }
-.reset-settings:hover { border-color: var(--primary); }
+.reset-settings:hover { background: var(--primary); color: var(--ground); }
 
 .knob-lock-toggle { display: flex !important; align-items: center; gap: 6px; font-weight: normal !important; }
 .knob-lock-toggle input { width: auto !important; margin: 0; }
@@ -81,25 +107,56 @@ table.draft-mode th, table.draft-mode td { padding: 12px 10px; font-size: 1rem; 
 table.draft-mode tbody tr { cursor: pointer; }
 tr.row-gone { opacity: 0.45; text-decoration: line-through; cursor: default !important; }
 tr.row-gone .mine-button { display: none; }
+tr.row-gone:hover { background: transparent; }
 tr.row-mine { background: color-mix(in srgb, var(--primary) 14%, transparent); text-decoration: none; opacity: 1; cursor: default !important; }
+tr.row-mine:hover { background: color-mix(in srgb, var(--primary) 20%, transparent); }
+
+/* The flash: an instant onset (0% holds through 71.4% = 1000ms of a 1400ms
+   animation) then a 400ms eased return to resting. Applied as a keyframe
+   animation, not a JS-driven class + setTimeout, so restarting it on each
+   genuine reshuffle is just a matter of giving the banner a fresh `key`
+   (see PlayerBoard.tsx) -- React remounts the DOM node, which is what
+   (re)starts a CSS animation; no timer to manage or clean up. */
+@keyframes reshuffle-flash-bg {
+  0%, 71.4% { background: var(--primary); border-color: var(--primary); }
+  100% { background: var(--surface-alt); border-color: var(--rule); }
+}
+@keyframes reshuffle-flash-text {
+  0%, 71.4% { color: #000; }
+  100% { color: var(--ink); }
+}
+@keyframes reshuffle-flash-strong {
+  0%, 71.4% { color: #000; }
+  100% { color: var(--primary); }
+}
 
 .reshuffle-banner {
-  font-size: 0.88rem; color: var(--ink); background: var(--surface-alt);
-  border: 1px solid var(--rule); border-radius: 6px; padding: 8px 12px; margin-bottom: 10px;
+  font-size: 0.95rem; color: var(--ink); background: var(--surface-alt);
+  border: 1px solid var(--rule); border-radius: 6px; padding: 16px 18px; margin-bottom: 14px;
+  min-height: 1.6em; display: flex; align-items: center;
+  animation: reshuffle-flash-bg 1400ms ease, reshuffle-flash-text 1400ms ease;
 }
-.reshuffle-banner strong { color: var(--primary); }
+.reshuffle-banner strong { color: var(--primary); animation: reshuffle-flash-strong 1400ms ease; }
 
 @media (prefers-reduced-motion: reduce) {
   tbody tr { transition: none !important; transform: none !important; }
+  .reshuffle-banner, .reshuffle-banner strong { animation: none !important; }
 }
 
-.pick-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-.pick-chip { border: 1px solid var(--rule); border-radius: 6px; padding: 6px 10px; text-align: center; min-width: 50px; background: var(--surface-alt); }
+.pick-chips { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; }
+.pick-chip {
+  border: 1px solid var(--rule); border-radius: 6px; padding: 6px 10px; text-align: center; min-width: 50px;
+  background: var(--surface-alt); font-family: inherit; color: inherit; cursor: default;
+}
+.pick-chip:disabled { opacity: 1; } /* looks like the old plain div, not a greyed-out button */
+.pick-chip-clickable { cursor: pointer; }
+.pick-chip-clickable:hover { border-color: var(--primary); }
+.pick-chip.selected { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 16%, var(--surface-alt)); }
 .pick-chip-round { font-size: 0.7rem; color: var(--ink-mute); }
 .pick-chip-overall { font-size: 1.1rem; font-weight: 700; color: var(--ink); }
 .pick-chip-gap { font-size: 0.7rem; color: var(--ink-mute); }
 
-.stat { margin-bottom: 8px; font-size: 0.95rem; color: var(--ink); }
+.stat { margin-bottom: 14px; font-size: 0.95rem; color: var(--ink); }
 
 .position-filter { margin-bottom: 8px; }
 .position-filter button {
@@ -164,10 +221,5 @@ tr.row-mine { background: color-mix(in srgb, var(--primary) 14%, transparent); t
 
 @media (max-width: 800px) {
   .next-pick-columns { grid-template-columns: 1fr; }
-}
-
-@media (max-width: 800px) {
-  .columns { flex-direction: column; }
-  .column-left { flex: 1 1 auto; width: 100%; }
-  .column-right { flex: 1 1 auto; width: 100%; }
+  .settings-row-knobs .reset-settings { margin-left: 0; width: 100%; }
 }

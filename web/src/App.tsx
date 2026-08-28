@@ -60,6 +60,18 @@ export default function App() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requestIdRef = useRef(0);
   const draft = useDraftState();
+  // Lifted out of NextPickPanel so a click on a round chip in DraftPosition
+  // can set it directly -- same endpoint, same panel, just a different
+  // target_pick (see the design note this was built against: "not
+  // hardcoded... the user's next pick as the default").
+  const [targetPick, setTargetPick] = useState<number | null>(null);
+  const nextPickPanelRef = useRef<HTMLDivElement>(null);
+
+  function selectPick(pick: number) {
+    setTargetPick(pick);
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    nextPickPanelRef.current?.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' });
+  }
 
   useEffect(() => {
     writeVersionedStorage(STORAGE_KEY, STORAGE_VERSION, { settings, boardState, mode });
@@ -114,8 +126,7 @@ export default function App() {
   return (
     <div className="app">
       <div className="app-header">
-        <img src={logo} alt="Mispricing Engine logo" width={36} height={36} />
-        <h1>Mispricing Engine</h1>
+        <img src={logo} alt="Mispricing Engine logo" width={288} height={288} />
         <div className="mode-toggle">
           <button type="button" className={mode === 'board' ? 'active' : ''} onClick={() => setMode('board')}>
             Board
@@ -125,76 +136,80 @@ export default function App() {
           </button>
         </div>
       </div>
-      <p className="tagline">Find the mispriced players, not the good ones.</p>
+      <p className="tagline">
+        Find the <strong className="tagline-chase">mispriced</strong> players, not the{' '}
+        <strong className="tagline-resist">good</strong> ones.
+      </p>
       <p className="intro">
         Most draft tools rank players. This one prices them, and shows you both prices side by side.{' '}
         <strong>Expert</strong> is the analyst consensus; <strong>Our Value</strong> is how many points a
         player scores above a freely-available replacement at his position, at whatever Variance and Model
         Influence you've set; <strong>Bargain</strong> is how much cheaper he is than that value deserves.
       </p>
-      <div className="columns">
-        <div className="column-left">
-          <SettingsPanel
-            settings={settings}
-            onChange={handleSettingsChange}
-            onReset={resetSettings}
-            draftMode={mode === 'draft'}
-          />
-          {mode === 'draft' && (
-            <div className="panel draft-status-panel">
-              <h2>Draft</h2>
-              <div className="stat">Overall pick <strong>{draft.draftPosition}</strong></div>
-              <div className="stat">{draft.mineSet.size} mine · {draft.goneSet.size} gone</div>
-              <button type="button" className="reset-draft" onClick={resetDraft}>
-                Reset draft
-              </button>
-            </div>
-          )}
+      <SettingsPanel
+        settings={settings}
+        onChange={handleSettingsChange}
+        onReset={resetSettings}
+        draftMode={mode === 'draft'}
+      />
+      {mode === 'draft' && (
+        <div className="panel draft-status-bar">
+          <span className="stat">Overall pick <strong>{draft.draftPosition}</strong></span>
+          <span className="stat">{draft.mineSet.size} mine · {draft.goneSet.size} gone</span>
+          <button type="button" className="reset-draft" onClick={resetDraft}>
+            Reset draft
+          </button>
         </div>
-        <div className="column-right">
-          {error && <div className="error">Could not reach the API: {error}</div>}
-          {!error && !league && (
-            <div className="loading">
-              <span className="spinner" />
-              Loading...
-            </div>
-          )}
-          {!error && league && (
-            <>
-              <DraftPosition
-                picks={league.picks}
-                hedgeWindow={league.hedge_window}
-                rounds={league.rounds}
-                reservedSlots={league.reserved_slots}
-                totalRounds={league.total_rounds}
-              />
-              <ScarcityTable rows={league.scarcity} />
-              {mode === 'draft' && (
+      )}
+      <div className="board-area">
+        {error && <div className="error">Could not reach the API: {error}</div>}
+        {!error && !league && (
+          <div className="loading">
+            <span className="spinner" />
+            Loading...
+          </div>
+        )}
+        {!error && league && (
+          <>
+            <DraftPosition
+              picks={league.picks}
+              hedgeWindow={league.hedge_window}
+              rounds={league.rounds}
+              reservedSlots={league.reserved_slots}
+              totalRounds={league.total_rounds}
+              selectedPick={mode === 'draft' ? targetPick : undefined}
+              onSelectPick={mode === 'draft' ? selectPick : undefined}
+            />
+            <ScarcityTable rows={league.scarcity} />
+            {mode === 'draft' && (
+              <div ref={nextPickPanelRef}>
                 <NextPickPanel
                   settings={settings}
                   gone={draft.gone}
                   mine={draft.mine}
                   currentPick={draft.draftPosition}
+                  targetPick={targetPick}
+                  onTargetPickChange={setTargetPick}
                 />
-              )}
-              <PlayerBoard
-                players={league.players}
-                variance={settings.variance}
-                modelInfluence={settings.model_influence}
-                boardState={boardState}
-                onBoardStateChange={handleBoardStateChange}
-                mode={mode}
-                lineup={settings.lineup}
-                goneSet={draft.goneSet}
-                mineSet={draft.mineSet}
-                onMarkGone={draft.markGone}
-                onMarkMine={draft.markMine}
-                onUndo={draft.undo}
-                canUndo={draft.canUndo}
-              />
-            </>
-          )}
-        </div>
+              </div>
+            )}
+            <PlayerBoard
+              players={league.players}
+              variance={settings.variance}
+              modelInfluence={settings.model_influence}
+              boardState={boardState}
+              onBoardStateChange={handleBoardStateChange}
+              mode={mode}
+              lineup={settings.lineup}
+              goneSet={draft.goneSet}
+              mineSet={draft.mineSet}
+              onMarkGone={draft.markGone}
+              onMarkMine={draft.markMine}
+              onUndo={draft.undo}
+              canUndo={draft.canUndo}
+            />
+          </>
+        )}
       </div>
       <SimulationPanel settings={settings} />
     </div>

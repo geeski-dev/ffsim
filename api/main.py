@@ -135,6 +135,7 @@ def api_league(settings: LeagueSettingsRequest) -> LeagueResponse:
             our_range_lo=round(row.our_range_lo, 1),
             our_range_hi=round(row.our_range_hi, 1),
             bargain=None if math.isnan(row.bargain) else round(row.bargain, 1),
+            alpha=None if math.isnan(row.alpha) else round(row.alpha, 1),
         )
         for row in top.itertuples()
     ]

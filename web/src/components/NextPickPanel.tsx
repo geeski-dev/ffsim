@@ -7,23 +7,23 @@ interface Props {
   gone: string[];
   mine: string[];
   currentPick: number;
+  // Not hardcoded to "my next pick" -- a parameter with my next pick as the
+  // default (null), controlled from App so a click on a round chip in
+  // DraftPosition can set it directly. Same endpoint, same component --
+  // the chip click and the manual "Preview pick" input both just set this.
+  targetPick: number | null;
+  onTargetPickChange: (pick: number | null) => void;
 }
 
 const DEBOUNCE_MS = 200;
 
-export default function NextPickPanel({ settings, gone, mine, currentPick }: Props) {
-  // Not hardcoded to "my next pick" -- a parameter with my next pick as the
-  // default (null). A later change wires a click on a round chip in
-  // DraftPosition straight into this; same endpoint, same component, just a
-  // different target_pick. The number input below is the interim way to
-  // reach that parameter until the chip click lands.
-  const [targetPickOverride, setTargetPickOverride] = useState<string>('');
+export default function NextPickPanel({ settings, gone, mine, currentPick, targetPick, onTargetPickChange }: Props) {
   const [resp, setResp] = useState<NextPickResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requestIdRef = useRef(0);
 
-  const parsedOverride = targetPickOverride.trim() === '' ? undefined : Number(targetPickOverride);
+  const parsedOverride = targetPick ?? undefined;
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -71,16 +71,16 @@ export default function NextPickPanel({ settings, gone, mine, currentPick }: Pro
             <span className="hedge-window-note">Hedge window: {resp.hedge_window}</span>
           </div>
 
-          <label className="preview-pick-input" title="Preview availability at a different pick than your own next one.">
+          <label className="preview-pick-input" title="Preview availability at a different pick than your own next one -- or click a round chip above.">
             Preview pick
             <input
               type="number"
               placeholder={resp.next_pick !== null ? String(resp.next_pick) : '—'}
-              value={targetPickOverride}
-              onChange={(e) => setTargetPickOverride(e.target.value)}
+              value={targetPick === null ? '' : String(targetPick)}
+              onChange={(e) => onTargetPickChange(e.target.value.trim() === '' ? null : Number(e.target.value))}
             />
-            {targetPickOverride.trim() !== '' && (
-              <button type="button" onClick={() => setTargetPickOverride('')}>
+            {targetPick !== null && (
+              <button type="button" onClick={() => onTargetPickChange(null)}>
                 Reset to my next pick
               </button>
             )}

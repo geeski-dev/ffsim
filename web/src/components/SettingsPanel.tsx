@@ -59,111 +59,51 @@ export default function SettingsPanel({ settings, onChange, onReset, draftMode }
   const slotOptions = Array.from({ length: settings.teams }, (_, i) => i + 1);
 
   return (
-    <div className="panel settings-panel">
-      <h2>League settings</h2>
+    <div className="panel settings-bar">
+      {/* Row 1: the two knobs -- what the user actually touches, and the
+          product's point of difference. They get their own row, on top,
+          not buried under roster plumbing. */}
+      <div className="settings-row settings-row-knobs">
+        <div className="settings-field" title="How much ceiling to chase in our own valuation, and how hard we penalize a steep floor collapse. Independent of Model Influence below — this shapes OUR number, not how much of it you see.">
+          <label htmlFor="variance-select">Variance</label>
+          <select
+            id="variance-select"
+            value={settings.variance}
+            disabled={knobsLocked}
+            onChange={(e) => update({ variance: e.target.value as LeagueSettings['variance'] })}
+          >
+            {VARIANCE_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
 
-      <label>
-        Teams
-        <select value={settings.teams} onChange={(e) => update({ teams: Number(e.target.value) })}>
-          {teamOptions.map((n) => (
-            <option key={n} value={n}>{n}</option>
-          ))}
-        </select>
-      </label>
+        <div className="settings-field" title="How much of our own valuation to act on. At Off you're looking at the consensus board — the market's ordering, arranged for your league's roster and scoring.">
+          <label htmlFor="model-influence-select">Model Influence</label>
+          <select
+            id="model-influence-select"
+            value={settings.model_influence}
+            disabled={knobsLocked}
+            onChange={(e) => update({ model_influence: e.target.value as LeagueSettings['model_influence'] })}
+          >
+            {MODEL_INFLUENCE_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
 
-      <label>
-        Scoring
-        <select
-          value={settings.scoring}
-          onChange={(e) => update({ scoring: e.target.value as LeagueSettings['scoring'] })}
-        >
-          {SCORING_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>{opt.label}</option>
-          ))}
-        </select>
-      </label>
-
-      <label>
-        Draft slot
-        <select value={settings.slot} onChange={(e) => update({ slot: Number(e.target.value) })}>
-          {slotOptions.map((n) => (
-            <option key={n} value={n}>{n}</option>
-          ))}
-        </select>
-      </label>
-
-      <label>
-        Bench size
-        <input
-          type="number"
-          min={0}
-          value={settings.bench}
-          onChange={(e) => update({ bench: Number(e.target.value) })}
-        />
-      </label>
-
-      <fieldset>
-        <legend>Starting lineup</legend>
-        {LINEUP_POSITIONS.map((pos) => (
-          <label key={pos} className="lineup-input">
-            {pos}
-            <input
-              type="number"
-              min={0}
-              value={settings.lineup[pos]}
-              onChange={(e) => updateLineup(pos, Number(e.target.value))}
-            />
+        {draftMode && (
+          <label className="knob-lock-toggle">
+            <input type="checkbox" checked={unlocked} onChange={(e) => setUnlocked(e.target.checked)} />
+            Unlock
           </label>
-        ))}
-      </fieldset>
+        )}
 
-      <label>
-        Playoff teams
-        <select
-          value={settings.playoff_teams}
-          onChange={(e) => update({ playoff_teams: Number(e.target.value) })}
-        >
-          {[2, 4, 6].map((n) => (
-            <option key={n} value={n}>{n}</option>
-          ))}
-        </select>
-      </label>
+        <button type="button" className="reset-settings" onClick={onReset}>
+          Reset settings
+        </button>
+      </div>
 
-      <label>
-        Reserved slots (K/DST)
-        <input
-          type="number"
-          min={0}
-          value={settings.reserved_slots}
-          onChange={(e) => update({ reserved_slots: Number(e.target.value) })}
-        />
-      </label>
-
-      <label title="How much ceiling to chase in our own valuation, and how hard we penalize a steep floor collapse. Independent of Model Influence below — this shapes OUR number, not how much of it you see.">
-        Variance
-        <select
-          value={settings.variance}
-          disabled={knobsLocked}
-          onChange={(e) => update({ variance: e.target.value as LeagueSettings['variance'] })}
-        >
-          {VARIANCE_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>{opt.label}</option>
-          ))}
-        </select>
-      </label>
-
-      <label title="How much of our own valuation to act on. At Off you're looking at the consensus board — the market's ordering, arranged for your league's roster and scoring.">
-        Model Influence
-        <select
-          value={settings.model_influence}
-          disabled={knobsLocked}
-          onChange={(e) => update({ model_influence: e.target.value as LeagueSettings['model_influence'] })}
-        >
-          {MODEL_INFLUENCE_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>{opt.label}</option>
-          ))}
-        </select>
-      </label>
       {settings.model_influence === 'Off' && (
         <p className="settings-note">
           Off shows the consensus board. We aren't asserting we're right — that's the only
@@ -171,16 +111,93 @@ export default function SettingsPanel({ settings, onChange, onReset, draftMode }
         </p>
       )}
 
-      {draftMode && (
-        <label className="knob-lock-toggle">
-          <input type="checkbox" checked={unlocked} onChange={(e) => setUnlocked(e.target.checked)} />
-          Unlock Variance / Model Influence
-        </label>
-      )}
+      {/* Rows 2+3 share one wrapping flex container on purpose -- on wide
+          viewports they read as a single continuous line, on narrow ones
+          they wrap onto as many lines as they need. */}
+      <div className="settings-row settings-row-league">
+        <div className="settings-field">
+          <label htmlFor="teams-select">Teams</label>
+          <select id="teams-select" value={settings.teams} onChange={(e) => update({ teams: Number(e.target.value) })}>
+            {teamOptions.map((n) => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
+        </div>
 
-      <button type="button" className="reset-settings" onClick={onReset}>
-        Reset settings
-      </button>
+        <div className="settings-field">
+          <label htmlFor="scoring-select">Scoring</label>
+          <select
+            id="scoring-select"
+            value={settings.scoring}
+            onChange={(e) => update({ scoring: e.target.value as LeagueSettings['scoring'] })}
+          >
+            {SCORING_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="settings-field">
+          <label htmlFor="slot-select">Draft slot</label>
+          <select id="slot-select" value={settings.slot} onChange={(e) => update({ slot: Number(e.target.value) })}>
+            {slotOptions.map((n) => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="settings-field">
+          <label htmlFor="playoff-select">Playoff teams</label>
+          <select
+            id="playoff-select"
+            value={settings.playoff_teams}
+            onChange={(e) => update({ playoff_teams: Number(e.target.value) })}
+          >
+            {[2, 4, 6].map((n) => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="settings-field settings-field-narrow">
+          <label htmlFor="bench-input">Bench</label>
+          <input
+            id="bench-input"
+            type="number"
+            min={0}
+            value={settings.bench}
+            onChange={(e) => update({ bench: Number(e.target.value) })}
+          />
+        </div>
+
+        <div className="settings-field settings-field-narrow">
+          <label htmlFor="reserved-input">K/DST</label>
+          <input
+            id="reserved-input"
+            type="number"
+            min={0}
+            value={settings.reserved_slots}
+            onChange={(e) => update({ reserved_slots: Number(e.target.value) })}
+          />
+        </div>
+
+        <div className="settings-field lineup-field">
+          <label>Lineup</label>
+          <div className="lineup-steppers">
+            {LINEUP_POSITIONS.map((pos) => (
+              <label key={pos} className="lineup-stepper">
+                <span>{pos}</span>
+                <input
+                  type="number"
+                  min={0}
+                  value={settings.lineup[pos]}
+                  onChange={(e) => updateLineup(pos, Number(e.target.value))}
+                />
+              </label>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

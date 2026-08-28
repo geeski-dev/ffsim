@@ -71,6 +71,12 @@ class PlayerRow(BaseModel):
     # construction: it states plainly that nothing here asserts the model
     # beats the market. Null for players with no market price to compare to.
     bargain: Optional[float] = None
+    # Raw alpha (vor_surplus - market_implied_vor), unscaled by model_influence.
+    # Only for display: at Off, the UI shows this instead of the (always 0.0)
+    # bargain figure, greyed out -- informative rather than dead, without
+    # implying it's being acted on. Null for the same players bargain is null
+    # for (no market price to compare to).
+    alpha: Optional[float] = None
 
 
 class LeagueResponse(BaseModel):

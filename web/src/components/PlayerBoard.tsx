@@ -85,9 +85,12 @@ function formatRange(lo: number | null, hi: number | null, digits = 1): string {
   return loStr === hiStr ? loStr : `${loStr}–${hiStr}`;
 }
 
-function sortValue(p: PlayerRow, key: SortKey): string | number | null {
+function sortValue(p: PlayerRow, key: SortKey, modelInfluence: ModelInfluence): string | number | null {
   if (key === 'expert_rank_lo') return p.expert_rank_lo;
   if (key === 'our_range_lo') return p.our_range_lo;
+  // At Off, Bargain displays raw alpha (see the column render below) --
+  // sort by what's actually shown, not by the always-0.0 applied bargain.
+  if (key === 'bargain' && modelInfluence === 'Off') return p.alpha;
   return p[key as keyof PlayerRow] as string | number | null;
 }
 
@@ -110,6 +113,16 @@ export default function PlayerBoard({
 }: Props) {
   const { sortKey, sortDir, positionFilter } = boardState;
   const [reshuffle, setReshuffle] = useState<{ up: number; down: number; movers: string[] } | null>(null);
+  // Counts genuine reshuffle events. Used only as a React `key` on the
+  // banner (see render below) so a new event forces a fresh DOM node,
+  // which is what (re)starts the CSS flash animation -- no setTimeout/
+  // setState-in-an-effect needed to turn the flash off again; the CSS
+  // animation (see .reshuffle-banner in App.css) does that on its own.
+  const [flashKey, setFlashKey] = useState(0);
+  const reducedMotion = useMemo(
+    () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+    [],
+  );
 
   // Entry speed is the whole design constraint here: search stays focused,
   // typing filters instantly, Enter marks the top (best-ranked) match gone
@@ -183,7 +196,12 @@ export default function PlayerBoard({
         });
         deltas.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
         const movers = deltas.slice(0, 3).map((d) => `${d.name} (${d.delta > 0 ? '↑' : '↓'}${Math.abs(d.delta)})`);
-        setReshuffle(up || down ? { up, down, movers } : null);
+        if (up || down) {
+          setReshuffle({ up, down, movers });
+          setFlashKey((k) => k + 1);
+        } else {
+          setReshuffle(null);
+        }
         shouldAnimate.current = true;
       }
       setPrevCanonicalRank(newRank);
@@ -204,15 +222,15 @@ export default function PlayerBoard({
       filtered = filtered.filter((p) => p.name.toLowerCase().includes(needle));
     }
     return [...filtered].sort((a, b) => {
-      const av = sortValue(a, sortKey);
-      const bv = sortValue(b, sortKey);
+      const av = sortValue(a, sortKey, modelInfluence);
+      const bv = sortValue(b, sortKey, modelInfluence);
       if (av === null && bv === null) return 0;
       if (av === null) return 1;
       if (bv === null) return -1;
       const cmp = typeof av === 'string' ? av.localeCompare(bv as string) : (av as number) - (bv as number);
       return sortDir === 'asc' ? cmp : -cmp;
     });
-  }, [players, positionFilter, neededPositions, mode, searchText, sortKey, sortDir]);
+  }, [players, positionFilter, neededPositions, mode, searchText, sortKey, sortDir, modelInfluence]);
 
   function markTopMatchGone() {
     const top = rows[0];
@@ -224,10 +242,6 @@ export default function PlayerBoard({
 
   const rowRefs = useRef(new Map<string, HTMLTableRowElement>());
   const prevTops = useRef(new Map<string, number>());
-  const reducedMotion = useMemo(
-    () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
-    [],
-  );
 
   useLayoutEffect(() => {
     const nextTops = new Map<string, number>();
@@ -266,7 +280,7 @@ export default function PlayerBoard({
     <div className="panel">
       <h2>Player board</h2>
       {reshuffle && (
-        <div className="reshuffle-banner" role="status">
+        <div key={flashKey} className="reshuffle-banner" role="status">
           <strong>{reshuffle.up}</strong> players moved up, <strong>{reshuffle.down}</strong> moved down.
           {reshuffle.movers.length > 0 && <> Biggest movers: {reshuffle.movers.join(', ')}.</>}
         </div>
@@ -314,6 +328,9 @@ export default function PlayerBoard({
               {COLUMNS.map((col) => (
                 <th key={col.key} title={col.title} onClick={() => toggleSort(col.key)}>
                   {col.label}
+                  {col.key === 'bargain' && modelInfluence === 'Off' && (
+                    <span className="inactive-marker"> (not applied)</span>
+                  )}
                   {sortKey === col.key ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}
                 </th>
               ))}
@@ -362,9 +379,15 @@ export default function PlayerBoard({
                   </td>
                   <td>{p.our_value.toFixed(1)}</td>
                   <td>{formatRange(p.our_range_lo, p.our_range_hi)}</td>
-                  <td className={p.bargain === null ? 'bargain-null' : p.bargain >= 0 ? 'bargain-positive' : 'bargain-negative'}>
-                    {p.bargain === null ? EM_DASH : formatSigned(p.bargain)}
-                  </td>
+                  {modelInfluence === 'Off' ? (
+                    <td className="bargain-inactive">
+                      {p.alpha === null ? EM_DASH : formatSigned(p.alpha)}
+                    </td>
+                  ) : (
+                    <td className={p.bargain === null ? 'bargain-null' : p.bargain >= 0 ? 'bargain-positive' : 'bargain-negative'}>
+                      {p.bargain === null ? EM_DASH : formatSigned(p.bargain)}
+                    </td>
+                  )}
                 </tr>
               );
             })}
