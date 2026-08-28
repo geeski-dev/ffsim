@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mispricing Engine banner — captured design reference</title>
+<style>
+  body { margin:0; background:#050806; color:#8A968C;
+         font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; }
+  .controls { display:flex; gap:8px; align-items:center; padding:16px 20px; font-size:13px; }
+  .controls button { padding:6px 14px; border:1px solid rgba(120,193,147,.25); border-radius:6px;
+                     background:transparent; color:#8A968C; font-weight:600; cursor:pointer; }
+  .controls button.on { background:#3DD68C; border-color:#3DD68C; color:#0A0C0A; }
+  .controls .w { margin-left:auto; font-variant-numeric:tabular-nums; }
+  .frame { margin:0 20px; border:1px solid rgba(120,193,147,.17); border-radius:12px;
+           overflow:hidden; container-type:inline-size; max-width:calc(100% - 40px);
+           transition:width .38s cubic-bezier(.22,1,.36,1); }
+  @media (prefers-reduced-motion:reduce) { .frame { transition:none; } }
+  .note { padding:16px 20px; font-size:12px; line-height:1.6; max-width:70ch; }
+
+  /* ---- everything below is the captured banner, verbatim behaviour ---- */
+  .draft-banner {
+    position:relative; width:100%; height:clamp(220px,25dvh,320px); min-height:220px;
+    overflow:hidden; isolation:isolate;
+    background:
+      linear-gradient(90deg,#070d09 0%, rgba(7,13,9,.96) 21%, rgba(4,15,9,.72) 51%, rgba(2,15,8,.22) 100%),
+      radial-gradient(circle at 78% 45%, #06361e, #07100b 54%, #050906 100%);
+  }
+  .draft-banner__mesh { position:absolute; inset:-14% -4% -12% 10%;
+    width:98%; height:126%; z-index:-2; opacity:.94; }
+  .draft-banner__glow { position:absolute; top:8%; left:42%; width:48%; height:80%;
+    z-index:-1; border-radius:50%; background:rgba(0,255,119,.07); filter:blur(58px); }
+  .draft-banner__speed { position:absolute; inset:0 0 0 45%; z-index:-1; opacity:.12;
+    transform:skew(-28deg);
+    background:repeating-linear-gradient(90deg,
+      transparent 0, transparent 44px, #29ff8f 45px, #29ff8f 46px, transparent 47px, transparent 88px);
+    mask-image:linear-gradient(90deg, transparent, #000 35%, transparent 95%);
+    -webkit-mask-image:linear-gradient(90deg, transparent, #000 35%, transparent 95%); }
+  .draft-banner__logo { position:absolute; z-index:2;
+    top:clamp(22px,3.4cqw,42px); left:clamp(20px,3.8cqw,56px);
+    width:clamp(205px,24cqw,330px); height:auto;
+    filter:drop-shadow(0 10px 24px rgba(0,255,119,.09)); }
+  .draft-banner__edge { position:absolute; inset:auto 0 0; height:2px;
+    background:linear-gradient(90deg, transparent 4%, #18ef7d 28%, rgba(24,239,125,.12) 72%, transparent 98%);
+    box-shadow:0 0 16px rgba(24,239,125,.26); }
+  @container (width <= 700px) {
+    .draft-banner { height:220px; }
+    .draft-banner__mesh { width:130%; left:18%; }
+    .draft-banner__logo { width:205px; }
+  }
+</style>
+</head>
+<body>
+<div class="controls">
+  <button data-w="390">Mobile 390</button>
+  <button data-w="768">Tablet 768</button>
+  <button data-w="1280" class="on">Desktop 1280</button>
+  <button data-w="1720">Ultrawide 1720</button>
+  <span class="w" id="wlabel">1280px</span>
+</div>
+
+<div class="frame" id="frame" style="width:1280px">
+<section class="draft-banner" aria-label="Mispricing Engine">
+  <div class="draft-banner__glow"></div>
+  <svg class="draft-banner__mesh" viewBox="0 0 1600 440" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <defs>
+      <linearGradient id="meshFade">
+        <stop offset="0" stop-color="#00ef79" stop-opacity="0"/>
+        <stop offset=".28" stop-color="#00ef79" stop-opacity=".1"/>
+        <stop offset=".66" stop-color="#19f58b" stop-opacity=".48"/>
+        <stop offset="1" stop-color="#00b85f" stop-opacity=".13"/>
+      </linearGradient>
+      <linearGradient id="signal" x1="0" y1="1" x2="1" y2="0">
+        <stop offset="0" stop-color="#00c765" stop-opacity=".08"/>
+        <stop offset=".56" stop-color="#31ff9b" stop-opacity=".94"/>
+        <stop offset="1" stop-color="#00a64f" stop-opacity=".15"/>
+      </linearGradient>
+      <radialGradient id="nodeGlow">
+        <stop offset="0" stop-color="#baffda"/>
+        <stop offset=".35" stop-color="#16f386"/>
+        <stop offset="1" stop-color="#16f386" stop-opacity="0"/>
+      </radialGradient>
+      <filter id="glow">
+        <feGaussianBlur stdDeviation="3.5" result="blur"/>
+        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+      <pattern id="microGrid" width="54" height="54" patternUnits="userSpaceOnUse">
+        <path d="M54 0H0V54" fill="none" stroke="#22df7e" stroke-opacity=".045"/>
+      </pattern>
+    </defs>
+    <rect width="1600" height="440" fill="url(#microGrid)"/>
+    <g fill="none" stroke="url(#meshFade)" stroke-width="1.4">
+      <path d="M250 360 470 216 670 310 870 124 1050 240 1280 72 1530 210"/>
+      <path d="M340 90 540 196 742 66 930 228 1150 102 1380 292 1590 132"/>
+      <path d="M510 430 670 310 930 228 1050 240 1240 422"/>
+      <path d="M742 66 870 124 1150 102 1280 72"/>
+      <path d="M470 216 540 196 670 310 742 66"/>
+      <path d="M870 124 930 228 1050 240 1150 102"/>
+      <path d="M1050 240 1280 72 1380 292 1530 210"/>
+      <path d="M1280 72 1590 132"/>
+      <path d="M1380 292 1600 390"/>
+    </g>
+    <g fill="none" stroke="url(#signal)" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)">
+      <path d="M325 332 430 314 505 334 612 275 700 294 790 220 886 240 978 167 1080 191 1188 105 1274 151 1396 72 1525 92" stroke-width="3.1"/>
+      <path d="M1085 372 1175 329 1243 349 1320 280 1401 299 1483 232 1586 245" stroke-width="1.5" opacity=".55"/>
+    </g>
+    <g fill="#21ed83" opacity=".72">
+      <circle cx="470" cy="216" r="3.5"/><circle cx="540" cy="196" r="3.5"/>
+      <circle cx="670" cy="310" r="3.5"/><circle cx="742" cy="66" r="3.5"/>
+      <circle cx="870" cy="124" r="3.5"/><circle cx="930" cy="228" r="3.5"/>
+      <circle cx="1050" cy="240" r="3.5"/><circle cx="1150" cy="102" r="3.5"/>
+      <circle cx="1280" cy="72" r="3.5"/><circle cx="1380" cy="292" r="3.5"/>
+      <circle cx="1530" cy="210" r="3.5"/>
+    </g>
+    <g filter="url(#glow)">
+      <circle cx="978" cy="167" r="18" fill="url(#nodeGlow)"/>
+      <circle cx="1396" cy="72" r="14" fill="url(#nodeGlow)"/>
+      <circle cx="700" cy="294" r="10" fill="url(#nodeGlow)"/>
+    </g>
+    <g fill="#43f89a" opacity=".32" font-family="monospace" font-size="12">
+      <text x="1090" y="184">VALUE DELTA +14.8</text>
+      <text x="1210" y="338">ADP SIGNAL 0.82</text>
+      <text x="1420" y="122">EDGE FOUND</text>
+    </g>
+  </svg>
+  <div class="draft-banner__speed"></div>
+  <img class="draft-banner__logo" src="../../web/src/assets/logo.png" alt="Mispricing Engine">
+  <div class="draft-banner__edge"></div>
+</section>
+</div>
+
+<p class="note">
+  Captured from https://mispricing-banner-preview.ghuakina.chatgpt.site on 28 Aug 2026 by reading the
+  live page's DOM and computed styles &mdash; this is the reference's own markup and CSS, not a
+  reconstruction. Class names have been converted to this repo's kebab-case convention and the logo
+  points at <code>web/src/assets/logo.png</code>. The surrounding browser-chrome mockup from the
+  original preview has been dropped; only the banner is production-relevant.
+</p>
+
+<script>
+  const frame = document.getElementById('frame');
+  const label = document.getElementById('wlabel');
+  document.querySelectorAll('.controls button').forEach(b => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('.controls button').forEach(x => x.classList.remove('on'));
+      b.classList.add('on');
+      frame.style.width = b.dataset.w + 'px';
+      label.textContent = b.dataset.w + 'px';
+    });
+  });
+</script>
+</body>
+</html>

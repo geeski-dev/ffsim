@@ -134,7 +134,7 @@ export default function App() {
     return (
       <div className="app">
         <div className="app-header">
-          <img src={logo} alt="Mispricing Engine logo" width={288} height={288} />
+          <img src={logo} alt="Mispricing Engine" width={1983} height={793} />
         </div>
         <AboutPage />
       </div>
@@ -144,7 +144,7 @@ export default function App() {
   return (
     <div className="app">
       <div className="app-header">
-        <img src={logo} alt="Mispricing Engine logo" width={288} height={288} />
+        <img src={logo} alt="Mispricing Engine" width={1983} height={793} />
         <div className="mode-toggle">
           <button type="button" className={mode === 'board' ? 'active' : ''} onClick={() => setMode('board')}>
             Board

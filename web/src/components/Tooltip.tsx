@@ -1,4 +1,15 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import {
+  type FocusEvent,
+  type KeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
+import { createPortal } from 'react-dom';
 import { TOOLTIPS, type TooltipId } from '../tooltips';
 
 interface Props {
@@ -8,6 +19,14 @@ interface Props {
   // text already doing that job (e.g. a bare "?" next to a table header).
   label?: string;
 }
+
+interface PopoverPosition {
+  left: number;
+  top: number;
+}
+
+const GAP = 6;
+const VIEWPORT_MARGIN = 8;
 
 // One component, used everywhere a term needs explaining -- same shape,
 // size and styling regardless of where it's dropped in. Hover OR focus
@@ -21,16 +40,50 @@ export default function Tooltip({ id, label }: Props) {
   const descId = useId();
   const wrapRef = useRef<HTMLSpanElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLSpanElement>(null);
+  const [position, setPosition] = useState<PopoverPosition | null>(null);
+
+  const updatePosition = useCallback(() => {
+    const trigger = triggerRef.current;
+    const popover = popoverRef.current;
+    if (!trigger || !popover) return;
+
+    const triggerRect = trigger.getBoundingClientRect();
+    const popoverRect = popover.getBoundingClientRect();
+    let left = triggerRect.left;
+    let top = triggerRect.bottom + GAP;
+
+    if (left + popoverRect.width > window.innerWidth - VIEWPORT_MARGIN) {
+      left = triggerRect.right - popoverRect.width;
+    }
+    if (top + popoverRect.height > window.innerHeight - VIEWPORT_MARGIN) {
+      top = triggerRect.top - popoverRect.height - GAP;
+    }
+
+    left = Math.min(Math.max(left, VIEWPORT_MARGIN), window.innerWidth - popoverRect.width - VIEWPORT_MARGIN);
+    top = Math.min(Math.max(top, VIEWPORT_MARGIN), window.innerHeight - popoverRect.height - VIEWPORT_MARGIN);
+    setPosition({ left, top });
+  }, []);
 
   function close() {
     setOpen(false);
+    setPosition(null);
   }
 
-  function handleBlur(e: React.FocusEvent) {
-    if (!wrapRef.current?.contains(e.relatedTarget as Node)) close();
+  function containsTarget(target: EventTarget | null) {
+    if (!(target instanceof Node)) return false;
+    return Boolean(wrapRef.current?.contains(target) || popoverRef.current?.contains(target));
   }
 
-  function handleKeyDown(e: React.KeyboardEvent) {
+  function containsFocus() {
+    return containsTarget(document.activeElement);
+  }
+
+  function handleBlur(e: FocusEvent) {
+    if (!containsTarget(e.relatedTarget)) close();
+  }
+
+  function handleKeyDown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
       close();
       triggerRef.current?.focus();
@@ -45,18 +98,60 @@ export default function Tooltip({ id, label }: Props) {
   useEffect(() => {
     if (!open) return;
     function handleDocumentMouseDown(e: MouseEvent) {
-      if (!wrapRef.current?.contains(e.target as Node)) close();
+      if (!containsTarget(e.target)) close();
     }
     document.addEventListener('mousedown', handleDocumentMouseDown);
     return () => document.removeEventListener('mousedown', handleDocumentMouseDown);
   }, [open]);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    updatePosition();
+  }, [open, updatePosition]);
+
+  useEffect(() => {
+    if (!open) return;
+    window.addEventListener('scroll', updatePosition, true);
+    window.addEventListener('resize', updatePosition);
+    return () => {
+      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, [open, updatePosition]);
+
+  function handleWrapperMouseLeave(e: ReactMouseEvent) {
+    if (containsFocus()) return;
+    if (!containsTarget(e.relatedTarget)) close();
+  }
+
+  const popover = open ? (
+    <span
+      className="tooltip-popover"
+      ref={popoverRef}
+      style={{
+        left: position ? `${position.left}px` : undefined,
+        top: position ? `${position.top}px` : undefined,
+        visibility: position ? 'visible' : 'hidden',
+      }}
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={(e) => {
+        if (containsFocus()) return;
+        if (!containsTarget(e.relatedTarget)) close();
+      }}
+    >
+      <span className="tooltip-text" id={descId}>{entry.short}</span>
+      <a className="tooltip-link" href={`/about#${entry.anchor}`}>
+        Learn more →
+      </a>
+    </span>
+  ) : null;
 
   return (
     <span
       className="tooltip-wrap"
       ref={wrapRef}
       onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
+      onMouseLeave={handleWrapperMouseLeave}
       onBlur={handleBlur}
       onKeyDown={handleKeyDown}
     >
@@ -86,14 +181,7 @@ export default function Tooltip({ id, label }: Props) {
           not the link) is what makes this readable by screen readers; the
           link is just a normal focusable element after the trigger in tab
           order when the popover is open. */}
-      {open && (
-        <span className="tooltip-popover">
-          <span className="tooltip-text" id={descId}>{entry.short}</span>
-          <a className="tooltip-link" href={`/about#${entry.anchor}`}>
-            Learn more →
-          </a>
-        </span>
-      )}
+      {popover && createPortal(popover, document.body)}
     </span>
   );
 }

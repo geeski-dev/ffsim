@@ -7,7 +7,12 @@
   color: var(--ink); border-radius: 4px; cursor: pointer; font-weight: 600;
 }
 .mode-toggle button.active { background: var(--primary); color: var(--ground); border-color: var(--primary); }
-.app-header img { height: 288px; width: 288px; object-fit: contain; }
+/* Intrinsic size on the <img> (1983x793) so the browser reserves the right
+   box before the PNG loads; CSS then paints it at 288px wide, height auto.
+   Previously this was a 2.5:1 image forced into a 288x288 square and saved
+   only by object-fit, which left ~86px of dead space above and below it.
+   Superseded once the full-width banner lands. */
+.app-header img { width: 288px; height: auto; }
 .about-link {
   margin-left: 12px; padding: 6px 14px; border: 1px solid var(--rule); border-radius: 4px;
   background: var(--surface-alt); color: var(--ink); font-weight: 600; text-decoration: none;
@@ -253,7 +258,7 @@ tr.row-mine:hover { background: color-mix(in srgb, var(--primary) 20%, transpare
   border-color: var(--primary); color: var(--primary);
 }
 .tooltip-popover {
-  position: absolute; top: calc(100% + 6px); left: 0; z-index: 100;
+  position: fixed; z-index: 100;
   display: flex; flex-direction: column; gap: 8px;
   width: max-content; max-width: 280px;
   padding: 10px 12px; border-radius: 8px;
