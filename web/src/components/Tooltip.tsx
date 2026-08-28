@@ -11,6 +11,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { TOOLTIPS, type TooltipId } from '../tooltips';
+import { useAboutNavigation } from '../aboutNavigation';
 
 interface Props {
   id: TooltipId;
@@ -36,6 +37,7 @@ const VIEWPORT_MARGIN = 8;
 // description even for users who never interact with the popover at all.
 export default function Tooltip({ id, label }: Props) {
   const entry = TOOLTIPS[id];
+  const aboutNavigation = useAboutNavigation();
   const [open, setOpen] = useState(false);
   const descId = useId();
   const wrapRef = useRef<HTMLSpanElement>(null);
@@ -140,7 +142,15 @@ export default function Tooltip({ id, label }: Props) {
       }}
     >
       <span className="tooltip-text" id={descId}>{entry.short}</span>
-      <a className="tooltip-link" href={`/about#${entry.anchor}`}>
+      <a
+        className="tooltip-link"
+        href={`/about#${entry.anchor}`}
+        onClick={(e) => {
+          if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0 || !aboutNavigation) return;
+          e.preventDefault();
+          aboutNavigation.navigateToAbout(entry.anchor);
+        }}
+      >
         Learn more →
       </a>
     </span>

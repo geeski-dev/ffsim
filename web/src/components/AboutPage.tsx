@@ -1,22 +1,8 @@
-import { useEffect } from 'react';
 import { TOOLTIPS, TOOLTIP_IDS } from '../tooltips';
 
 export default function AboutPage() {
-  // The browser's own "scroll to #fragment on load" fires before React has
-  // rendered anything -- the target id doesn't exist in the DOM yet, the
-  // native scroll silently no-ops, and nothing retries it. This does that
-  // retry, once layout has actually happened.
-  useEffect(() => {
-    const hash = window.location.hash.slice(1);
-    if (!hash) return;
-    const target = document.getElementById(hash);
-    target?.scrollIntoView({ block: 'start' });
-  }, []);
-
   return (
     <div className="about-page">
-      <a href="/" className="back-link">← Back to board</a>
-
       <section id="what-this-is">
         <h2>What this is</h2>
         <p>Most draft tools rank players. This one <strong>prices</strong> them.</p>

@@ -11,6 +11,7 @@ import SimulationPanel from './components/SimulationPanel';
 import AboutPage from './components/AboutPage';
 import { readVersionedStorage, writeVersionedStorage } from './storage/versionedStorage';
 import { useDraftState } from './hooks/useDraftState';
+import { AboutNavigationContext } from './aboutNavigation';
 import './App.css';
 
 const DEFAULT_SETTINGS: LeagueSettings = {
@@ -31,12 +32,13 @@ const DEFAULT_BOARD_STATE: BoardState = {
   positionFilter: 'All',
 };
 
-type AppMode = 'board' | 'draft' | 'simulate';
+type AppMode = 'board' | 'draft' | 'simulate' | 'about';
+type PersistedMode = Exclude<AppMode, 'about'>;
 
 interface PersistedAppState {
   settings: LeagueSettings;
   boardState: BoardState;
-  mode: AppMode;
+  mode: PersistedMode;
 }
 
 const STORAGE_KEY = 'ffsim.appState';
@@ -53,20 +55,23 @@ export default function App() {
   const [initialState] = useState<PersistedAppState>(() =>
     readVersionedStorage(STORAGE_KEY, STORAGE_VERSION, DEFAULT_PERSISTED_STATE),
   );
+  const [initialMode] = useState<AppMode>(() => {
+    const path = window.location.pathname.replace(/\/+$/, '');
+    if (path === '/about') return 'about';
+    return ['board', 'draft', 'simulate'].includes(initialState.mode) ? initialState.mode : 'board';
+  });
   const [settings, setSettings] = useState<LeagueSettings>(initialState.settings);
   const [boardState, setBoardState] = useState<BoardState>(initialState.boardState);
-  const [mode, setMode] = useState<AppMode>(initialState.mode);
+  const [mode, setMode] = useState<AppMode>(initialMode);
+  const [pendingAboutAnchor, setPendingAboutAnchor] = useState<string | null>(() =>
+    initialMode === 'about' ? window.location.hash.slice(1) || null : null,
+  );
   const [league, setLeague] = useState<LeagueResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requestIdRef = useRef(0);
   const draft = useDraftState();
-  // No client-side router: /about is a real, separate page served by
-  // Vite's own SPA fallback (and would need the same at a static host in
-  // production). window.location.pathname only changes via an actual
-  // navigation, which remounts the whole app anyway, so reading it once
-  // here is sufficient -- no state, no popstate listener needed.
-  const isAboutPage = window.location.pathname.replace(/\/+$/, '') === '/about';
+  const previousModeRef = useRef<AppMode>(initialMode);
   // Lifted out of NextPickPanel so a click on a round chip in DraftPosition
   // can set it directly -- same endpoint, same panel, just a different
   // target_pick (see the design note this was built against: "not
@@ -81,8 +86,34 @@ export default function App() {
   }
 
   useEffect(() => {
-    writeVersionedStorage(STORAGE_KEY, STORAGE_VERSION, { settings, boardState, mode });
+    const persistedMode: PersistedMode = mode === 'about' ? 'board' : mode;
+    writeVersionedStorage(STORAGE_KEY, STORAGE_VERSION, { settings, boardState, mode: persistedMode });
   }, [boardState, mode, settings]);
+
+  useEffect(() => {
+    const wasAbout = previousModeRef.current === 'about';
+    if (mode === 'about') {
+      const anchor = pendingAboutAnchor ?? window.location.hash.slice(1);
+      if (anchor) {
+        const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        document.getElementById(anchor)?.scrollIntoView({
+          behavior: reducedMotion ? 'auto' : 'smooth',
+          block: 'start',
+        });
+      } else if (!wasAbout) {
+        window.scrollTo({ top: 0, behavior: 'auto' });
+      }
+      setPendingAboutAnchor(null);
+    } else if (wasAbout) {
+      window.scrollTo({ top: 0, behavior: 'auto' });
+    }
+    previousModeRef.current = mode;
+  }, [mode, pendingAboutAnchor]);
+
+  const navigateToAbout = useCallback((anchor?: string) => {
+    setPendingAboutAnchor(anchor ?? null);
+    setMode('about');
+  }, []);
 
   const handleBoardStateChange = useCallback((next: BoardState) => {
     setBoardState(next);
@@ -130,104 +161,112 @@ export default function App() {
     };
   }, [settings]);
 
-  if (isAboutPage) {
-    return (
-      <div className="root">
-        <Banner collapsed={false} />
-        <div className="app">
-          <AboutPage />
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="root">
-      <Banner collapsed={mode === 'draft'} />
-      <div className="app">
-        <nav className="nav-tabs" aria-label="Primary">
-          <button type="button" className={mode === 'board' ? 'active' : ''} onClick={() => setMode('board')}>
-            Board
-          </button>
-          <button type="button" className={mode === 'draft' ? 'active' : ''} onClick={() => setMode('draft')}>
-            Draft
-          </button>
-          <button type="button" className={mode === 'simulate' ? 'active' : ''} onClick={() => setMode('simulate')}>
-            Simulate
-          </button>
-          <a href="/about">About</a>
-        </nav>
-      <p className="tagline">
-        Find the <strong className="tagline-chase">mispriced</strong> players, not the{' '}
-        <strong className="tagline-resist">good</strong> ones.
-      </p>
-      <SettingsPanel
-        settings={settings}
-        onChange={handleSettingsChange}
-        onReset={resetSettings}
-        draftMode={mode === 'draft'}
-      />
-      {mode === 'draft' && (
-        <div className="panel draft-status-bar">
-          <span className="stat">Overall pick <strong>{draft.draftPosition}</strong></span>
-          <span className="stat">{draft.mineSet.size} mine · {draft.goneSet.size} gone</span>
-          <button type="button" className="reset-draft" onClick={resetDraft}>
-            Reset draft
-          </button>
-        </div>
-      )}
-      <div className="board-area">
-        {error && <div className="error">Could not reach the API: {error}</div>}
-        {!error && !league && (
-          <div className="loading">
-            <span className="spinner" />
-            Loading...
-          </div>
-        )}
-        {!error && league && (
+    <AboutNavigationContext.Provider value={{ navigateToAbout }}>
+      <div className="root">
+        <Banner collapsed={mode === 'draft'} />
+        <div className="app">
+          <nav className="nav-tabs" aria-label="Primary">
+            <button type="button" className={mode === 'board' ? 'active' : ''} onClick={() => setMode('board')}>
+              Board
+            </button>
+            <button type="button" className={mode === 'draft' ? 'active' : ''} onClick={() => setMode('draft')}>
+              Draft
+            </button>
+            <button type="button" className={mode === 'simulate' ? 'active' : ''} onClick={() => setMode('simulate')}>
+              Simulate
+            </button>
+            <button type="button" className={mode === 'about' ? 'active' : ''} onClick={() => navigateToAbout()}>
+              About
+            </button>
+          </nav>
+
+        {mode !== 'about' && (
           <>
-            <DraftPosition
-              picks={league.picks}
-              hedgeWindow={league.hedge_window}
-              rounds={league.rounds}
-              reservedSlots={league.reserved_slots}
-              totalRounds={league.total_rounds}
-              selectedPick={mode === 'draft' ? targetPick : undefined}
-              onSelectPick={mode === 'draft' ? selectPick : undefined}
+            <p className="tagline">
+              Find the <strong className="tagline-chase">mispriced</strong> players, not the{' '}
+              <strong className="tagline-resist">good</strong> ones.
+            </p>
+            <SettingsPanel
+              settings={settings}
+              onChange={handleSettingsChange}
+              onReset={resetSettings}
+              draftMode={mode === 'draft'}
             />
-            <ScarcityTable rows={league.scarcity} />
             {mode === 'draft' && (
-              <div ref={nextPickPanelRef}>
-                <NextPickPanel
-                  settings={settings}
-                  gone={draft.gone}
-                  mine={draft.mine}
-                  currentPick={draft.draftPosition}
-                  targetPick={targetPick}
-                  onTargetPickChange={setTargetPick}
-                />
+              <div className="panel draft-status-bar">
+                <span className="stat">Overall pick <strong>{draft.draftPosition}</strong></span>
+                <span className="stat">{draft.mineSet.size} mine · {draft.goneSet.size} gone</span>
+                <button type="button" className="reset-draft" onClick={resetDraft}>
+                  Reset draft
+                </button>
               </div>
             )}
-            <PlayerBoard
-              players={league.players}
-              variance={settings.variance}
-              modelInfluence={settings.model_influence}
-              boardState={boardState}
-              onBoardStateChange={handleBoardStateChange}
-              mode={mode === 'draft' ? 'draft' : 'board'}
-              lineup={settings.lineup}
-              goneSet={draft.goneSet}
-              mineSet={draft.mineSet}
-              onMarkGone={draft.markGone}
-              onMarkMine={draft.markMine}
-              onUndo={draft.undo}
-              canUndo={draft.canUndo}
-            />
           </>
         )}
+
+        <div className="board-area">
+          {mode === 'about' && (
+            <div className="panel">
+              <AboutPage />
+            </div>
+          )}
+          {mode === 'simulate' && <SimulationPanel settings={settings} />}
+          {(mode === 'board' || mode === 'draft') && (
+            <>
+              {error && <div className="error">Could not reach the API: {error}</div>}
+              {!error && !league && (
+                <div className="loading">
+                  <span className="spinner" />
+                  Loading...
+                </div>
+              )}
+              {!error && league && (
+                <>
+                  <DraftPosition
+                    picks={league.picks}
+                    hedgeWindow={league.hedge_window}
+                    rounds={league.rounds}
+                    reservedSlots={league.reserved_slots}
+                    totalRounds={league.total_rounds}
+                    selectedPick={mode === 'draft' ? targetPick : undefined}
+                    onSelectPick={mode === 'draft' ? selectPick : undefined}
+                  />
+                  <ScarcityTable rows={league.scarcity} />
+                  {mode === 'draft' && (
+                    <div ref={nextPickPanelRef}>
+                      <NextPickPanel
+                        settings={settings}
+                        gone={draft.gone}
+                        mine={draft.mine}
+                        currentPick={draft.draftPosition}
+                        targetPick={targetPick}
+                        onTargetPickChange={setTargetPick}
+                      />
+                    </div>
+                  )}
+                  <PlayerBoard
+                    players={league.players}
+                    variance={settings.variance}
+                    modelInfluence={settings.model_influence}
+                    boardState={boardState}
+                    onBoardStateChange={handleBoardStateChange}
+                    mode={mode}
+                    lineup={settings.lineup}
+                    goneSet={draft.goneSet}
+                    mineSet={draft.mineSet}
+                    onMarkGone={draft.markGone}
+                    onMarkMine={draft.markMine}
+                    onUndo={draft.undo}
+                    canUndo={draft.canUndo}
+                  />
+                </>
+              )}
+            </>
+          )}
+          </div>
+        </div>
       </div>
-      <SimulationPanel settings={settings} />
-      </div>
-    </div>
+    </AboutNavigationContext.Provider>
   );
 }

@@ -74,15 +74,13 @@
   background: transparent; color: var(--ink); font: inherit; font-size: 0.9rem; font-weight: 600;
   line-height: 1.2; text-decoration: none; cursor: pointer; white-space: nowrap;
 }
-.nav-tabs button:last-child,
-.nav-tabs a:last-child { border-right: 0; }
+.nav-tabs button:last-child { border-right: 0; }
 .nav-tabs button.active,
 .nav-tabs a.active {
   background: var(--primary); color: var(--ground);
   box-shadow: 0 0 16px rgba(24, 239, 125, 0.26);
 }
-.nav-tabs button:not(.active):hover,
-.nav-tabs a:not(.active):hover { color: var(--primary); }
+.nav-tabs button:not(.active):hover { color: var(--primary); }
 .tagline { margin: 0 0 20px; color: var(--ink-mute); font-size: 0.95rem; }
 .tagline-chase { color: var(--primary); }
 .tagline-resist { color: var(--bargain-negative); }
@@ -339,9 +337,6 @@ tr.row-mine:hover { background: color-mix(in srgb, var(--primary) 20%, transpare
 /* ----------------------------------------------------------------------
    About page
    ---------------------------------------------------------------------- */
-.back-link { display: inline-block; margin-bottom: 24px; color: var(--primary); text-decoration: none; font-weight: 600; }
-.back-link:hover { text-decoration: underline; }
-
 .about-page { max-width: 720px; }
 .about-page section { margin-bottom: 40px; scroll-margin-top: 16px; }
 .about-page h2 { font-size: 1.4rem; color: var(--ink); margin: 0 0 14px; }
