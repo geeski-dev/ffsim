@@ -1,4 +1,4 @@
-.root { min-height: 100dvh; }
+.root { min-height: 100dvh; overflow-x: clip; }
 .app { max-width: 1400px; margin: 0 auto; padding: 24px; text-align: left; }
 
 .banner-shell { width: 100%; container-type: inline-size; }
@@ -15,7 +15,7 @@
 }
 .draft-banner__mesh {
   position: absolute; inset: -14% -4% -12% 10%;
-  width: 98%; height: 126%; z-index: -2; opacity: 0.94;
+  width: 98%; height: 126%; z-index: -2; opacity: 0.94; overflow: hidden;
 }
 .draft-banner__glow {
   position: absolute; top: 8%; left: 42%; width: 48%; height: 80%;
@@ -64,11 +64,12 @@
 }
 
 .nav-tabs {
-  display: flex; width: max-content; max-width: 100%; margin-bottom: 18px;
+  display: flex; width: 100%; max-width: max-content; margin-bottom: 18px;
   border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; background: var(--surface-alt);
 }
 .nav-tabs button,
 .nav-tabs a {
+  flex: 1 1 0;
   display: flex; align-items: center; justify-content: center;
   min-width: 0; padding: 8px 18px; border: 0; border-right: 1px solid var(--rule);
   background: transparent; color: var(--ink); font: inherit; font-size: 0.9rem; font-weight: 600;
@@ -295,6 +296,10 @@ tr.row-mine:hover { background: color-mix(in srgb, var(--primary) 20%, transpare
 @media (max-width: 800px) {
   .next-pick-columns { grid-template-columns: 1fr; }
   .settings-row-knobs .reset-settings { margin-left: 0; width: 100%; }
+  .nav-tabs { max-width: 100%; }
+  .nav-tabs button { padding-right: 10px; padding-left: 10px; }
+  .lineup-field { min-width: 0; }
+  .lineup-steppers { flex-wrap: wrap; }
 }
 
 /* ----------------------------------------------------------------------
