@@ -36,6 +36,11 @@ th[title] { text-decoration: underline dotted var(--rule); text-underline-offset
 .bargain-null { color: var(--ink-mute); }
 
 .settings-note { font-size: 0.82rem; color: var(--ink-mute); line-height: 1.4; margin: -4px 0 12px; }
+.reset-settings {
+  width: 100%; padding: 8px 10px; border: 1px solid var(--rule); border-radius: 4px;
+  background: var(--surface-alt); color: var(--ink); font-weight: 600; cursor: pointer;
+}
+.reset-settings:hover { border-color: var(--primary); }
 
 .reshuffle-banner {
   font-size: 0.88rem; color: var(--ink); background: var(--surface-alt);

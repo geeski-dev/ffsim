@@ -1,12 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { LeagueSettings, LeagueResponse } from './api/types';
 import { fetchLeague } from './api/client';
 import logo from './assets/logo.png';
 import SettingsPanel from './components/SettingsPanel';
 import DraftPosition from './components/DraftPosition';
 import ScarcityTable from './components/ScarcityTable';
-import PlayerBoard from './components/PlayerBoard';
+import PlayerBoard, { type BoardState } from './components/PlayerBoard';
 import SimulationPanel from './components/SimulationPanel';
+import { readVersionedStorage, writeVersionedStorage } from './storage/versionedStorage';
 import './App.css';
 
 const DEFAULT_SETTINGS: LeagueSettings = {
@@ -21,14 +22,62 @@ const DEFAULT_SETTINGS: LeagueSettings = {
   model_influence: 'Off',
 };
 
+const DEFAULT_BOARD_STATE: BoardState = {
+  sortKey: 'our_value',
+  sortDir: 'desc',
+  positionFilter: 'All',
+};
+
+type AppMode = 'board' | 'draft';
+
+interface PersistedAppState {
+  settings: LeagueSettings;
+  boardState: BoardState;
+  mode: AppMode;
+}
+
+const STORAGE_KEY = 'ffsim.appState';
+const STORAGE_VERSION = 1;
+const DEFAULT_PERSISTED_STATE: PersistedAppState = {
+  settings: DEFAULT_SETTINGS,
+  boardState: DEFAULT_BOARD_STATE,
+  mode: 'board',
+};
+
 const DEBOUNCE_MS = 300;
 
 export default function App() {
-  const [settings, setSettings] = useState<LeagueSettings>(DEFAULT_SETTINGS);
+  const [initialState] = useState<PersistedAppState>(() =>
+    readVersionedStorage(STORAGE_KEY, STORAGE_VERSION, DEFAULT_PERSISTED_STATE),
+  );
+  const [settings, setSettings] = useState<LeagueSettings>(initialState.settings);
+  const [boardState, setBoardState] = useState<BoardState>(initialState.boardState);
+  const [mode, setMode] = useState<AppMode>(initialState.mode);
   const [league, setLeague] = useState<LeagueResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requestIdRef = useRef(0);
+
+  useEffect(() => {
+    writeVersionedStorage(STORAGE_KEY, STORAGE_VERSION, { settings, boardState, mode });
+  }, [boardState, mode, settings]);
+
+  const handleBoardStateChange = useCallback((next: BoardState) => {
+    setBoardState(next);
+  }, []);
+
+  function handleSettingsChange(next: LeagueSettings) {
+    if (next.variance !== settings.variance || next.model_influence !== settings.model_influence) {
+      setBoardState((current) => ({ ...current, sortKey: 'our_value', sortDir: 'desc' }));
+    }
+    setSettings(next);
+  }
+
+  function resetSettings() {
+    setSettings(DEFAULT_SETTINGS);
+    setBoardState(DEFAULT_BOARD_STATE);
+    setMode('board');
+  }
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -65,7 +114,7 @@ export default function App() {
       </p>
       <div className="columns">
         <div className="column-left">
-          <SettingsPanel settings={settings} onChange={setSettings} />
+          <SettingsPanel settings={settings} onChange={handleSettingsChange} onReset={resetSettings} />
         </div>
         <div className="column-right">
           {error && <div className="error">Could not reach the API: {error}</div>}
@@ -89,6 +138,8 @@ export default function App() {
                 players={league.players}
                 variance={settings.variance}
                 modelInfluence={settings.model_influence}
+                boardState={boardState}
+                onBoardStateChange={handleBoardStateChange}
               />
             </>
           )}

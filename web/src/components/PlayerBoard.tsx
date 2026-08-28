@@ -1,15 +1,25 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ModelInfluence, PlayerRow, Variance } from '../api/types';
 
+const POSITIONS = ['All', 'QB', 'RB', 'WR', 'TE'] as const;
+
+export type SortKey = 'name' | 'position' | 'team' | 'adp' | 'expert_rank' | 'expert_rank_lo' | 'our_value' | 'our_range_lo' | 'bargain';
+export type SortDirection = 'asc' | 'desc';
+export type PositionFilter = (typeof POSITIONS)[number];
+
+export interface BoardState {
+  sortKey: SortKey;
+  sortDir: SortDirection;
+  positionFilter: PositionFilter;
+}
+
 interface Props {
   players: PlayerRow[];
   variance: Variance;
   modelInfluence: ModelInfluence;
+  boardState: BoardState;
+  onBoardStateChange: (next: BoardState) => void;
 }
-
-type SortKey = 'name' | 'position' | 'team' | 'adp' | 'expert_rank' | 'expert_rank_lo' | 'our_value' | 'our_range_lo' | 'bargain';
-
-const POSITIONS = ['All', 'QB', 'RB', 'WR', 'TE'] as const;
 
 const COLUMNS: { key: SortKey; label: string; title?: string }[] = [
   { key: 'name', label: 'Name' },
@@ -69,10 +79,14 @@ function sortValue(p: PlayerRow, key: SortKey): string | number | null {
 
 const ANIMATE_MS = 420;
 
-export default function PlayerBoard({ players, variance, modelInfluence }: Props) {
-  const [sortKey, setSortKey] = useState<SortKey>('our_value');
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
-  const [positionFilter, setPositionFilter] = useState<(typeof POSITIONS)[number]>('All');
+export default function PlayerBoard({
+  players,
+  variance,
+  modelInfluence,
+  boardState,
+  onBoardStateChange,
+}: Props) {
+  const { sortKey, sortDir, positionFilter } = boardState;
   const [reshuffle, setReshuffle] = useState<{ up: number; down: number; movers: string[] } | null>(null);
 
   // Settings change the instant a dropdown fires; `players` only updates
@@ -100,16 +114,6 @@ export default function PlayerBoard({ players, variance, modelInfluence }: Props
       : null,
   );
   const shouldAnimate = useRef(false);
-
-  // Re-sorting by Our Value the instant a knob changes (ahead of the new
-  // data even arriving) still needs the settings-level comparison -- this
-  // part IS about the dropdown firing, not about the data landing.
-  const [prevKnobs, setPrevKnobs] = useState({ variance, modelInfluence });
-  if (variance !== prevKnobs.variance || modelInfluence !== prevKnobs.modelInfluence) {
-    setPrevKnobs({ variance, modelInfluence });
-    setSortKey('our_value');
-    setSortDir('desc');
-  }
 
   if (players !== prevPlayers) {
     const knobsChangedSincePriorPlayers =
@@ -189,10 +193,9 @@ export default function PlayerBoard({ players, variance, modelInfluence }: Props
   function toggleSort(key: SortKey) {
     shouldAnimate.current = false; // manual sort clicks re-order, but aren't "the reshuffle"
     if (key === sortKey) {
-      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+      onBoardStateChange({ ...boardState, sortDir: sortDir === 'asc' ? 'desc' : 'asc' });
     } else {
-      setSortKey(key);
-      setSortDir('desc');
+      onBoardStateChange({ ...boardState, sortKey: key, sortDir: 'desc' });
     }
   }
 
@@ -207,7 +210,11 @@ export default function PlayerBoard({ players, variance, modelInfluence }: Props
       )}
       <div className="position-filter">
         {POSITIONS.map((pos) => (
-          <button key={pos} className={pos === positionFilter ? 'active' : ''} onClick={() => setPositionFilter(pos)}>
+          <button
+            key={pos}
+            className={pos === positionFilter ? 'active' : ''}
+            onClick={() => onBoardStateChange({ ...boardState, positionFilter: pos })}
+          >
             {pos}
           </button>
         ))}

@@ -3,6 +3,7 @@ import type { LeagueSettings, ModelInfluence, Variance } from '../api/types';
 interface Props {
   settings: LeagueSettings;
   onChange: (next: LeagueSettings) => void;
+  onReset: () => void;
 }
 
 const SCORING_OPTIONS: { value: LeagueSettings['scoring']; label: string }[] = [
@@ -28,7 +29,7 @@ const MODEL_INFLUENCE_OPTIONS: { value: ModelInfluence; label: string }[] = [
   { value: 'Extreme', label: 'Extreme (our board)' },
 ];
 
-export default function SettingsPanel({ settings, onChange }: Props) {
+export default function SettingsPanel({ settings, onChange, onReset }: Props) {
   function update(patch: Partial<LeagueSettings>) {
     const next = { ...settings, ...patch };
     if (next.slot > next.teams) next.slot = next.teams;
@@ -152,6 +153,10 @@ export default function SettingsPanel({ settings, onChange }: Props) {
           setting whose behavior has actually been measured.
         </p>
       )}
+
+      <button type="button" className="reset-settings" onClick={onReset}>
+        Reset settings
+      </button>
     </div>
   );
 }
