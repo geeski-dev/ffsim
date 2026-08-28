@@ -1270,6 +1270,98 @@ def run_adp_vor(seasons=REAL_SEASONS, seeds=range(8), base_seed: int = 0,
                            strategy, league, raw_dir)
 
 
+def _draft_composition_record(run_name: str, season: int, slot: int, seed_idx: int,
+                              roster: list[int], positions: np.ndarray) -> dict:
+    rounds = np.arange(1, len(roster) + 1)
+    roster_pos = positions[roster]
+    rec = {"run": run_name, "season": season, "slot": slot, "seed": seed_idx}
+    for pos in FANTASY_POS:
+        mask = roster_pos == pos
+        rec[f"first6_{pos}"] = int((mask & (rounds <= 6)).sum())
+        rec[f"overall_{pos}"] = int(mask.sum())
+        rec[f"first_round_{pos}"] = float(rounds[mask][0]) if mask.any() else np.nan
+    return rec
+
+
+def _position_composition_summary(rows: list[dict]) -> pd.DataFrame:
+    metrics = [f"first6_{p}" for p in FANTASY_POS]
+    metrics += [f"overall_{p}" for p in FANTASY_POS]
+    metrics += [f"first_round_{p}" for p in FANTASY_POS]
+    out = pd.DataFrame(rows).groupby(["season", "run"])[metrics].mean().round(2)
+    return out.reset_index()
+
+
+def print_adp_vor_position_diagnostic(seasons=REAL_SEASONS, seeds=range(8),
+                                      base_seed: int = 0,
+                                      strategy: Strategy = BPA_RISK_AWARE,
+                                      league: League = DEFAULT_LEAGUE,
+                                      raw_dir: str = RAW_DIR) -> pd.DataFrame:
+    """Report-only diagnostic for NULL vs ADP_VOR draft shape.
+
+    The draft simulations are rerun with the same board construction, policies,
+    slots, and RNG seeding as the scoring runs, but no scoring state or run
+    result rows are changed. Counts are per model-team roster, averaged across
+    slots and seeds for each season.
+    """
+    round_cap, _ = compute_round_cap(SEASONS, TEAMS, raw_dir)
+    base_league = _capped_league(league, round_cap)
+    rows: list[dict] = []
+
+    for season in seasons:
+        null_board, _, _, _, _ = build_season_board(season, raw_dir)
+        null_board = null_board.assign(vor=0.0)
+        null_positions = null_board["position"].to_numpy()
+
+        adp_board, _, _, _, _, _ = build_source_board(season, "adp", raw_dir)
+        adp_board = _with_valuation(adp_board, "proj_points", base_league,
+                                    up_spread=adp_board["up_spread"].to_numpy(),
+                                    down_spread=adp_board["down_spread"].to_numpy(),
+                                    miss_rate=adp_board["miss_rate"].to_numpy())
+        adp_positions = adp_board["position"].to_numpy()
+
+        for slot in range(1, TEAMS + 1):
+            lg = dataclasses.replace(base_league, slot=slot)
+            for seed_idx in seeds:
+                rngs = _rngs_for_draft(base_seed, season, seed_idx, TEAMS)
+                null_rosters = run_backtest_draft(
+                    null_board, lg, _null_model_policy(lg), _blind_field(lg), rngs)
+                rows.append(_draft_composition_record(
+                    "NULL", season, slot, seed_idx, null_rosters[slot], null_positions))
+
+                rngs = _rngs_for_draft(base_seed, season, seed_idx, TEAMS)
+                adp_rosters = run_backtest_draft(
+                    adp_board, lg, strategy, _blind_field(lg), rngs)
+                rows.append(_draft_composition_record(
+                    "ADP_VOR", season, slot, seed_idx, adp_rosters[slot], adp_positions))
+
+    summary = _position_composition_summary(rows)
+
+    print("\nADP_VOR POSITIONAL COMPOSITION DIAGNOSTIC")
+    print("=" * 78)
+    print("Counts are mean players drafted by the model team per roster; first-round")
+    print("columns are the mean roster round where that position is first taken.\n")
+
+    def _side_by_side(cols: list[str], title: str) -> None:
+        by_run = summary.set_index(["season", "run"])
+        pieces = []
+        for run_name in ["NULL", "ADP_VOR"]:
+            part = by_run.xs(run_name, level="run")[cols].copy()
+            part.columns = [f"{run_name}_{c}" for c in cols]
+            pieces.append(part)
+        tbl = pd.concat(pieces, axis=1)
+        print(title)
+        print(tbl.to_string())
+        print()
+
+    _side_by_side([f"first6_{p}" for p in FANTASY_POS],
+                  "first 6 rounds")
+    _side_by_side([f"overall_{p}" for p in FANTASY_POS],
+                  "overall roster")
+    _side_by_side([f"first_round_{p}" for p in FANTASY_POS],
+                  "mean first-taken round")
+    return summary
+
+
 def run_real(seasons=REAL_SEASONS, seeds=range(8), base_seed: int = 0,
             strategy: Strategy = BPA_RISK_AWARE, league: League = DEFAULT_LEAGUE,
             raw_dir: str = RAW_DIR) -> pd.DataFrame:
@@ -1345,6 +1437,8 @@ def full_report(seasons=SEASONS, real_seasons=REAL_SEASONS, seeds=range(8),
     report_all_runs(runs)
     print("\nsign test -- seasons beaten (mean starter pts > NULL's that season):")
     print(sign_test(runs).to_string(index=False))
+    print_adp_vor_position_diagnostic(real_seasons, seeds, base_seed,
+                                      raw_dir=raw_dir)
     return runs
 
 
