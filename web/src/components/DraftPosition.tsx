@@ -1,4 +1,5 @@
 import type { PickChip } from '../api/types';
+import Tooltip from './Tooltip';
 
 interface Props {
   picks: PickChip[];
@@ -19,11 +20,11 @@ export default function DraftPosition({
 }: Props) {
   return (
     <div className="panel">
-      <h2>Draft position</h2>
+      <h2>Draft position <Tooltip id="draft-position" /></h2>
       <div className="stat">
         {rounds} skill rounds + {reservedSlots} reserved = {totalRounds} total
       </div>
-      <div className="stat">Hedge window: <strong>{hedgeWindow}</strong></div>
+      <div className="stat">Hedge window: <strong>{hedgeWindow}</strong> <Tooltip id="hedge-window" /></div>
       <div className="pick-chips">
         {picks.map((p) => {
           const isSelected = selectedPick === p.overall_pick;

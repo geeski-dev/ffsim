@@ -1,4 +1,5 @@
 import type { PositionScarcityRow } from '../api/types';
+import Tooltip from './Tooltip';
 
 interface Props {
   rows: PositionScarcityRow[];
@@ -7,15 +8,15 @@ interface Props {
 export default function ScarcityTable({ rows }: Props) {
   return (
     <div className="panel">
-      <h2>Positional scarcity</h2>
+      <h2>Positional scarcity <Tooltip id="positional-scarcity" /></h2>
       <div className="table-scroll">
         <table>
           <thead>
             <tr>
               <th>Position</th>
-              <th>Effective starters</th>
-              <th>Replacement pts</th>
-              <th>Top VOR</th>
+              <th>Effective starters <Tooltip id="effective-starters" /></th>
+              <th>Replacement pts <Tooltip id="replacement-pts" /></th>
+              <th>Top VOR <Tooltip id="top-vor" /></th>
             </tr>
           </thead>
           <tbody>

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { LeagueSettings, NextPickResponse } from '../api/types';
 import { fetchNextPick } from '../api/client';
+import Tooltip from './Tooltip';
 
 interface Props {
   settings: LeagueSettings;
@@ -105,7 +106,7 @@ export default function NextPickPanel({ settings, gone, mine, currentPick, targe
 
           {resp.tier_depletion.length > 0 && (
             <div className="tier-depletion">
-              <h3>Tier depletion</h3>
+              <h3>Tier depletion <Tooltip id="tier" /></h3>
               <ul>
                 {resp.tier_depletion.map((t) => (
                   <li key={t.position}>

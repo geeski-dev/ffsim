@@ -13,6 +13,10 @@
   --steady: #5EC2E8;
   --error: var(--bargain-negative);
   --error-tint: rgba(232, 101, 79, 0.12);
+  /* Softer green derived from --primary (lower opacity, same hue) -- used
+     for the tooltip popover border. Not a new colour, and it stays derived
+     if --primary ever changes. */
+  --tooltip-border: color-mix(in srgb, var(--primary) 45%, transparent);
 }
 
 html {

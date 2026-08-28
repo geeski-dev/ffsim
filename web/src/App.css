@@ -8,6 +8,11 @@
 }
 .mode-toggle button.active { background: var(--primary); color: var(--ground); border-color: var(--primary); }
 .app-header img { height: 288px; width: 288px; object-fit: contain; }
+.about-link {
+  margin-left: 12px; padding: 6px 14px; border: 1px solid var(--rule); border-radius: 4px;
+  background: var(--surface-alt); color: var(--ink); font-weight: 600; text-decoration: none;
+}
+.about-link:hover { border-color: var(--primary); color: var(--primary); }
 .tagline { margin: 0 0 20px; color: var(--ink-mute); font-size: 0.95rem; }
 .tagline-chase { color: var(--primary); }
 .tagline-resist { color: var(--bargain-negative); }
@@ -133,7 +138,7 @@ tr.row-mine:hover { background: color-mix(in srgb, var(--primary) 20%, transpare
 .reshuffle-banner {
   font-size: 0.95rem; color: var(--ink); background: var(--surface-alt);
   border: 1px solid var(--rule); border-radius: 6px; padding: 16px 18px; margin-bottom: 14px;
-  min-height: 1.6em; display: flex; align-items: center;
+  min-height: 1.6em; display: flex; align-items: center; gap: 8px;
   animation: reshuffle-flash-bg 1400ms ease, reshuffle-flash-text 1400ms ease;
 }
 .reshuffle-banner strong { color: var(--primary); animation: reshuffle-flash-strong 1400ms ease; }
@@ -223,3 +228,60 @@ tr.row-mine:hover { background: color-mix(in srgb, var(--primary) 20%, transpare
   .next-pick-columns { grid-template-columns: 1fr; }
   .settings-row-knobs .reset-settings { margin-left: 0; width: 100%; }
 }
+
+/* ----------------------------------------------------------------------
+   Tooltip -- one component, same shape/size/styling everywhere. A small
+   glyph trigger (optionally preceded by a label) opens a popover with a
+   short description and a "Learn more" link into /about. Hover or focus
+   opens it; Escape or clicking outside closes it.
+   ---------------------------------------------------------------------- */
+.tooltip-wrap { position: relative; display: inline-flex; vertical-align: middle; margin-left: 5px; }
+.tooltip-trigger {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: none; border: none; padding: 0; margin: 0; cursor: pointer; font: inherit; color: inherit;
+}
+.tooltip-trigger-label { font-weight: inherit; }
+.tooltip-glyph {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: 1.15em; height: 1.15em; border-radius: 50%;
+  border: 1px solid var(--ink-mute); color: var(--ink-mute);
+  font-size: 0.72em; line-height: 1; font-weight: 700;
+}
+.tooltip-trigger:hover .tooltip-glyph,
+.tooltip-trigger:focus-visible .tooltip-glyph,
+.tooltip-trigger[aria-expanded="true"] .tooltip-glyph {
+  border-color: var(--primary); color: var(--primary);
+}
+.tooltip-popover {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 100;
+  display: flex; flex-direction: column; gap: 8px;
+  width: max-content; max-width: 280px;
+  padding: 10px 12px; border-radius: 8px;
+  border: 1px solid var(--tooltip-border);
+  background: var(--surface-alt); color: var(--ink);
+  font-size: 0.82rem; line-height: 1.4; font-weight: normal; text-align: left;
+  white-space: normal; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+.tooltip-text { color: var(--ink); }
+.tooltip-link { color: var(--primary); font-weight: 600; text-decoration: none; }
+.tooltip-link:hover, .tooltip-link:focus-visible { text-decoration: underline; }
+
+/* ----------------------------------------------------------------------
+   About page
+   ---------------------------------------------------------------------- */
+.back-link { display: inline-block; margin-bottom: 24px; color: var(--primary); text-decoration: none; font-weight: 600; }
+.back-link:hover { text-decoration: underline; }
+
+.about-page { max-width: 720px; }
+.about-page section { margin-bottom: 40px; scroll-margin-top: 16px; }
+.about-page h2 { font-size: 1.4rem; color: var(--ink); margin: 0 0 14px; }
+.about-page h3 { font-size: 1.1rem; color: var(--ink); margin: 20px 0 8px; scroll-margin-top: 16px; }
+.about-page p { color: var(--ink); line-height: 1.6; margin: 0 0 14px; font-size: 1rem; }
+.about-page a { color: var(--primary); }
+.about-page strong { color: var(--ink); }
+.about-page em { color: var(--ink-mute); font-style: italic; }
+
+.glossary-list { display: flex; flex-direction: column; gap: 16px; margin: 0; }
+.glossary-entry { border-bottom: 1px solid var(--rule); padding-bottom: 12px; scroll-margin-top: 16px; }
+.glossary-entry dt { font-weight: 700; color: var(--ink); margin-bottom: 4px; }
+.glossary-entry dd { margin: 0; color: var(--ink-mute); line-height: 1.5; }

@@ -1,5 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { LineupSettings, ModelInfluence, PlayerRow, Variance } from '../api/types';
+import Tooltip from './Tooltip';
+import type { TooltipId } from '../tooltips';
 
 const BOARD_POSITIONS = ['All', 'QB', 'RB', 'WR', 'TE'] as const;
 // Draft mode collapses the filter to a couple of presets on purpose -- fewer
@@ -35,40 +37,16 @@ interface Props {
 
 const FLEX_ELIGIBLE = ['RB', 'WR', 'TE'] as const;
 
-const COLUMNS: { key: SortKey; label: string; title?: string }[] = [
+const COLUMNS: { key: SortKey; label: string; tooltip?: TooltipId }[] = [
   { key: 'name', label: 'Name' },
   { key: 'position', label: 'Pos' },
   { key: 'team', label: 'Team' },
-  {
-    key: 'adp',
-    label: 'ADP',
-    title: 'Average draft position — roughly where this player gets picked in real drafts.',
-  },
-  {
-    key: 'expert_rank',
-    label: 'Expert',
-    title: 'Median overall rank across 12+ individual FantasyPros analysts (their own consensus aggregate excluded, so a panel of one voice doesn’t get double-counted).',
-  },
-  {
-    key: 'expert_rank_lo',
-    label: 'Expert Range',
-    title: 'Where the highest and lowest of 12 analysts have him. A wide range means they don’t agree.',
-  },
-  {
-    key: 'our_value',
-    label: 'Our Value',
-    title: 'Our own valuation at your current Variance and Model Influence settings — points above a freely-available replacement, blended toward the market by however much influence you’ve given the model.',
-  },
-  {
-    key: 'our_range_lo',
-    label: 'Our Range',
-    title: 'Our own high and low estimate. Shown so you can judge our confidence the same way you judge theirs.',
-  },
-  {
-    key: 'bargain',
-    label: 'Bargain',
-    title: 'How much better this player is than his draft price implies, scaled by Model Influence. At Off this reads 0.0 for everyone — we’re asserting nothing, you’re looking at consensus arithmetic. Blank means we don’t have a reliable price for him.',
-  },
+  { key: 'adp', label: 'ADP', tooltip: 'adp' },
+  { key: 'expert_rank', label: 'Expert', tooltip: 'expert' },
+  { key: 'expert_rank_lo', label: 'Expert Range', tooltip: 'expert-range' },
+  { key: 'our_value', label: 'Our Value', tooltip: 'our-value' },
+  { key: 'our_range_lo', label: 'Our Range', tooltip: 'our-range' },
+  { key: 'bargain', label: 'Bargain', tooltip: 'bargain' },
 ];
 
 const EM_DASH = '—';
@@ -281,8 +259,11 @@ export default function PlayerBoard({
       <h2>Player board</h2>
       {reshuffle && (
         <div key={flashKey} className="reshuffle-banner" role="status">
-          <strong>{reshuffle.up}</strong> players moved up, <strong>{reshuffle.down}</strong> moved down.
-          {reshuffle.movers.length > 0 && <> Biggest movers: {reshuffle.movers.join(', ')}.</>}
+          <span>
+            <strong>{reshuffle.up}</strong> players moved up, <strong>{reshuffle.down}</strong> moved down.
+            {reshuffle.movers.length > 0 && <> Biggest movers: {reshuffle.movers.join(', ')}.</>}
+          </span>
+          <Tooltip id="reshuffle-banner" />
         </div>
       )}
       {mode === 'draft' && (
@@ -326,8 +307,9 @@ export default function PlayerBoard({
             <tr>
               {mode === 'draft' && <th className="mark-col">Mark</th>}
               {COLUMNS.map((col) => (
-                <th key={col.key} title={col.title} onClick={() => toggleSort(col.key)}>
+                <th key={col.key} onClick={() => toggleSort(col.key)}>
                   {col.label}
+                  {col.tooltip && <Tooltip id={col.tooltip} />}
                   {col.key === 'bargain' && modelInfluence === 'Off' && (
                     <span className="inactive-marker"> (not applied)</span>
                   )}

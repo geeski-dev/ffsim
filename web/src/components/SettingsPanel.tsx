@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { LeagueSettings, ModelInfluence, Variance } from '../api/types';
+import Tooltip from './Tooltip';
 
 interface Props {
   settings: LeagueSettings;
@@ -64,8 +65,9 @@ export default function SettingsPanel({ settings, onChange, onReset, draftMode }
           product's point of difference. They get their own row, on top,
           not buried under roster plumbing. */}
       <div className="settings-row settings-row-knobs">
-        <div className="settings-field" title="How much ceiling to chase in our own valuation, and how hard we penalize a steep floor collapse. Independent of Model Influence below — this shapes OUR number, not how much of it you see.">
+        <div className="settings-field">
           <label htmlFor="variance-select">Variance</label>
+          <Tooltip id="variance" />
           <select
             id="variance-select"
             value={settings.variance}
@@ -78,8 +80,9 @@ export default function SettingsPanel({ settings, onChange, onReset, draftMode }
           </select>
         </div>
 
-        <div className="settings-field" title="How much of our own valuation to act on. At Off you're looking at the consensus board — the market's ordering, arranged for your league's roster and scoring.">
+        <div className="settings-field">
           <label htmlFor="model-influence-select">Model Influence</label>
+          <Tooltip id="model-influence" />
           <select
             id="model-influence-select"
             value={settings.model_influence}
@@ -117,6 +120,7 @@ export default function SettingsPanel({ settings, onChange, onReset, draftMode }
       <div className="settings-row settings-row-league">
         <div className="settings-field">
           <label htmlFor="teams-select">Teams</label>
+          <Tooltip id="teams" />
           <select id="teams-select" value={settings.teams} onChange={(e) => update({ teams: Number(e.target.value) })}>
             {teamOptions.map((n) => (
               <option key={n} value={n}>{n}</option>
@@ -126,6 +130,7 @@ export default function SettingsPanel({ settings, onChange, onReset, draftMode }
 
         <div className="settings-field">
           <label htmlFor="scoring-select">Scoring</label>
+          <Tooltip id="scoring" />
           <select
             id="scoring-select"
             value={settings.scoring}
@@ -139,6 +144,7 @@ export default function SettingsPanel({ settings, onChange, onReset, draftMode }
 
         <div className="settings-field">
           <label htmlFor="slot-select">Draft slot</label>
+          <Tooltip id="draft-slot" />
           <select id="slot-select" value={settings.slot} onChange={(e) => update({ slot: Number(e.target.value) })}>
             {slotOptions.map((n) => (
               <option key={n} value={n}>{n}</option>
@@ -148,6 +154,7 @@ export default function SettingsPanel({ settings, onChange, onReset, draftMode }
 
         <div className="settings-field">
           <label htmlFor="playoff-select">Playoff teams</label>
+          <Tooltip id="playoff-teams" />
           <select
             id="playoff-select"
             value={settings.playoff_teams}
@@ -161,6 +168,7 @@ export default function SettingsPanel({ settings, onChange, onReset, draftMode }
 
         <div className="settings-field settings-field-narrow">
           <label htmlFor="bench-input">Bench</label>
+          <Tooltip id="bench-size" />
           <input
             id="bench-input"
             type="number"
@@ -172,6 +180,7 @@ export default function SettingsPanel({ settings, onChange, onReset, draftMode }
 
         <div className="settings-field settings-field-narrow">
           <label htmlFor="reserved-input">K/DST</label>
+          <Tooltip id="reserved-slots" />
           <input
             id="reserved-input"
             type="number"
@@ -183,10 +192,12 @@ export default function SettingsPanel({ settings, onChange, onReset, draftMode }
 
         <div className="settings-field lineup-field">
           <label>Lineup</label>
+          <Tooltip id="starting-lineup" />
           <div className="lineup-steppers">
             {LINEUP_POSITIONS.map((pos) => (
               <label key={pos} className="lineup-stepper">
                 <span>{pos}</span>
+                {pos === 'FLEX' && <Tooltip id="flex" />}
                 <input
                   type="number"
                   min={0}

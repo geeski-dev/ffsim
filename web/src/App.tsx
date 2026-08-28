@@ -8,6 +8,7 @@ import ScarcityTable from './components/ScarcityTable';
 import PlayerBoard, { type BoardState } from './components/PlayerBoard';
 import NextPickPanel from './components/NextPickPanel';
 import SimulationPanel from './components/SimulationPanel';
+import AboutPage from './components/AboutPage';
 import { readVersionedStorage, writeVersionedStorage } from './storage/versionedStorage';
 import { useDraftState } from './hooks/useDraftState';
 import './App.css';
@@ -60,6 +61,12 @@ export default function App() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requestIdRef = useRef(0);
   const draft = useDraftState();
+  // No client-side router: /about is a real, separate page served by
+  // Vite's own SPA fallback (and would need the same at a static host in
+  // production). window.location.pathname only changes via an actual
+  // navigation, which remounts the whole app anyway, so reading it once
+  // here is sufficient -- no state, no popstate listener needed.
+  const isAboutPage = window.location.pathname.replace(/\/+$/, '') === '/about';
   // Lifted out of NextPickPanel so a click on a round chip in DraftPosition
   // can set it directly -- same endpoint, same panel, just a different
   // target_pick (see the design note this was built against: "not
@@ -123,6 +130,17 @@ export default function App() {
     };
   }, [settings]);
 
+  if (isAboutPage) {
+    return (
+      <div className="app">
+        <div className="app-header">
+          <img src={logo} alt="Mispricing Engine logo" width={288} height={288} />
+        </div>
+        <AboutPage />
+      </div>
+    );
+  }
+
   return (
     <div className="app">
       <div className="app-header">
@@ -135,6 +153,7 @@ export default function App() {
             Draft
           </button>
         </div>
+        <a href="/about" className="about-link">About</a>
       </div>
       <p className="tagline">
         Find the <strong className="tagline-chase">mispriced</strong> players, not the{' '}
