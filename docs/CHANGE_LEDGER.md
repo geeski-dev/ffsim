@@ -119,7 +119,7 @@ an age-scaled floor on `down_spread`, not hand-entered per-player values.
 **Falsified if:** 28+ backs as a cohort hit their projections at the same rate
 as under-28 backs. Testable directly once historical ADP lands.
 
-### CL-004 — `swing_picks` should relax `ev_cap`, not double `ceiling_weight`. READY.
+### CL-004 — `swing_picks` should relax `ev_cap`, not double `ceiling_weight`. LANDED.
 **Term:** `ev_cap`, at the picks named in `swing_picks`.
 **The defect:** `swing_picks` currently doubles `ceiling_weight` at named picks.
 At Extreme variance `ceiling_weight` is already 1.0, so doubling-then-capping
@@ -132,6 +132,11 @@ is `ev_cap`'s job. `ev_cap` governs how far below the best available median you
 may reach; relaxing it at named picks is exactly the intended behaviour.
 **Falsified if:** relaxing `ev_cap` at swing picks produces no change in the
 drafted roster.
+**Effect:** Implemented as `ev_cap_for_pick(overall)`: named swing picks double
+the normal `ev_cap`, capped at 0.70. Empty `swing_picks` remains unchanged.
+On the current half-PPR pool, 12 teams, slot 6, Extreme variance with swing
+picks differed from Extreme without swing picks in 83/100 seeds, with 483
+differing user-pick slots.
 
 ---
 

@@ -13,7 +13,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from ffsim.draft import MODEL_INFLUENCE_LEVELS, VARIANCE_LEVELS, VARIANCE_SWING_ENABLED
+from ffsim.config import League
+from ffsim.draft import MODEL_INFLUENCE_LEVELS, Strategy, VARIANCE_LEVELS, VARIANCE_SWING_ENABLED
 
 FAILURES = 0
 
@@ -173,6 +174,32 @@ def test_variance_stays_active_at_model_influence_off():
           extreme.value_components(board)["effective_vor"][0] == 90.0)
 
 
+def test_swing_picks_relax_ev_cap_only_at_named_picks():
+    print("\nswing_picks relax ev_cap at named picks instead of changing ceiling_weight")
+    board = pd.DataFrame({
+        "position": ["RB", "WR"],
+        "vor": [100.0, 50.0],
+        "vor_p85": [100.0, 200.0],
+        "vor_p15": [100.0, 50.0],
+        "risk_index": [0.0, 0.0],
+    })
+    league = League(teams=2, slot=1, playoff_teams=2)
+    avail = np.array([True, True])
+    strategy = Strategy("swing", ceiling_weight=1.0, ev_cap=0.35, swing_picks=(1,))
+    no_swing = Strategy("no_swing", ceiling_weight=1.0, ev_cap=0.35, swing_picks=())
+
+    check("empty swing_picks keeps the high-median player inside the normal cap",
+          no_swing.choose(board, avail, {}, league, league.rounds, [], np.random.default_rng(0),
+                          overall=1, rnd=1) == 0)
+    check("non-swing overall pick behaves like empty swing_picks",
+          strategy.choose(board, avail, {}, league, league.rounds, [], np.random.default_rng(0),
+                          overall=2, rnd=1) == 0)
+    check("named swing pick relaxes the cap enough to take the upside player",
+          strategy.choose(board, avail, {}, league, league.rounds, [], np.random.default_rng(0),
+                          overall=1, rnd=1) == 1)
+    check("swing pick doubles ev_cap but caps it at 0.70", strategy.ev_cap_for_pick(1) == 0.70)
+
+
 if __name__ == "__main__":
     test_variance_levels_match_spec_table()
     test_risk_penalty_is_not_on_the_variance_knob()
@@ -182,6 +209,7 @@ if __name__ == "__main__":
     test_value_components_matches_independent_recompute_blended()
     test_value_components_exposes_effective_range_for_display()
     test_variance_stays_active_at_model_influence_off()
+    test_swing_picks_relax_ev_cap_only_at_named_picks()
     print()
     if FAILURES:
         print(f"{FAILURES} check(s) FAILED")

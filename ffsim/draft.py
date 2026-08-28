@@ -21,6 +21,7 @@ import pandas as pd
 from .config import League
 
 RUN_WINDOW = 8
+SWING_EV_CAP_MAX = 0.70
 
 
 # --------------------------------------------------------------------------
@@ -179,7 +180,7 @@ class Strategy:
     pos_bonus: Dict[str, float] = field(default_factory=dict)
     early_rounds: int = 3
     ev_cap: float = 0.10             # max fraction of best-available VOR surrendered early
-    swing_picks: tuple = ()          # overall pick numbers where ceiling_weight doubles
+    swing_picks: tuple = ()          # overall pick numbers where ev_cap relaxes
 
     def value_components(self, board: pd.DataFrame, overall: int = 0) -> Dict[str, np.ndarray]:
         """The model's per-player value, independent of roster context.
@@ -219,10 +220,7 @@ class Strategy:
             effective_vor_p85 = np.where(priced, effective_vor + (vor_p85 - vor), vor_p85)
             effective_vor_p15 = np.where(priced, effective_vor - (vor - vor_p15), vor_p15)
 
-        cw = self.ceiling_weight
-        if overall in self.swing_picks:
-            cw = min(1.0, cw * 2.0)
-        blended = (1 - cw) * effective_vor + cw * effective_vor_p85
+        blended = (1 - self.ceiling_weight) * effective_vor + self.ceiling_weight * effective_vor_p85
 
         risk = board["risk_index"].to_numpy() * self.risk_penalty * 10.0
         # size of the floor collapse, not its level -- vor is already in the
@@ -235,6 +233,12 @@ class Strategy:
             "effective_vor_p15": effective_vor_p15,
             "score": blended - risk - downside,
         }
+
+    def ev_cap_for_pick(self, overall: int) -> float:
+        """EV cap at this pick; swing picks may reach further for upside."""
+        if overall in self.swing_picks:
+            return min(SWING_EV_CAP_MAX, self.ev_cap * 2.0)
+        return self.ev_cap
 
     def choose(self, board: pd.DataFrame, avail: np.ndarray,
                counts: Dict[str, int], league: League, picks_left: int,
@@ -271,7 +275,8 @@ class Strategy:
             legal_vor = np.where(legal, effective_vor, -np.inf)
             best = legal_vor.max()
             if np.isfinite(best):
-                floor = best - self.ev_cap * abs(best)
+                ev_cap = self.ev_cap_for_pick(overall)
+                floor = best - ev_cap * abs(best)
                 capped = legal & (effective_vor >= floor)
                 if capped.any():
                     legal = capped
