@@ -38,6 +38,10 @@ def load():
                                         recursive=True), key=len)[0],
                        low_memory=False)
     prod = prod[prod["season_type"].astype(str).str.upper().eq("REG")].copy()
+    n_before = len(prod)
+    prod = prod.drop_duplicates(["player_id", "season", "week"], keep="first")
+    print(f"  HIST_01: dropped {n_before - len(prod)} duplicate "
+          "(player_id, season, week) rows on load")
     prod["fp"] = sum(prod[c].fillna(0) * w for c, w in HALF_PPR.items())
     return inj, prod
 

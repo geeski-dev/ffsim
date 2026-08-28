@@ -58,7 +58,13 @@ def load(stem: str, directory: str = "data/raw"):
             if "_SOURCES" not in h.upper() and "_GAPS" not in h.upper()]
     if not hits:
         return None
-    return pd.read_csv(sorted(hits, key=len)[0], low_memory=False)
+    df = pd.read_csv(sorted(hits, key=len)[0], low_memory=False)
+    if stem == "HIST_01":
+        n_before = len(df)
+        df = df.drop_duplicates(["player_id", "season", "week"], keep="first")
+        print(f"  HIST_01: dropped {n_before - len(df)} duplicate "
+              "(player_id, season, week) rows on load")
+    return df
 
 
 SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "v"}
