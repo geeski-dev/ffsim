@@ -31,7 +31,7 @@ const DEFAULT_BOARD_STATE: BoardState = {
   positionFilter: 'All',
 };
 
-type AppMode = 'board' | 'draft';
+type AppMode = 'board' | 'draft' | 'simulate';
 
 interface PersistedAppState {
   settings: LeagueSettings;
@@ -145,15 +145,18 @@ export default function App() {
     <div className="root">
       <Banner collapsed={mode === 'draft'} />
       <div className="app">
-        <div className="mode-toggle">
+        <nav className="nav-tabs" aria-label="Primary">
           <button type="button" className={mode === 'board' ? 'active' : ''} onClick={() => setMode('board')}>
             Board
           </button>
           <button type="button" className={mode === 'draft' ? 'active' : ''} onClick={() => setMode('draft')}>
             Draft
           </button>
-        </div>
-        <a href="/about" className="about-link">About</a>
+          <button type="button" className={mode === 'simulate' ? 'active' : ''} onClick={() => setMode('simulate')}>
+            Simulate
+          </button>
+          <a href="/about">About</a>
+        </nav>
       <p className="tagline">
         Find the <strong className="tagline-chase">mispriced</strong> players, not the{' '}
         <strong className="tagline-resist">good</strong> ones.
@@ -211,7 +214,7 @@ export default function App() {
               modelInfluence={settings.model_influence}
               boardState={boardState}
               onBoardStateChange={handleBoardStateChange}
-              mode={mode}
+              mode={mode === 'draft' ? 'draft' : 'board'}
               lineup={settings.lineup}
               goneSet={draft.goneSet}
               mineSet={draft.mineSet}
