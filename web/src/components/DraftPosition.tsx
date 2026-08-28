@@ -26,9 +26,10 @@ export default function DraftPosition({
           type="button"
           className="collapse-toggle"
           aria-expanded={!collapsed}
+          aria-label={collapsed ? 'Expand draft position' : 'Collapse draft position'}
           onClick={() => setCollapsed(!collapsed)}
         >
-          {collapsed ? 'Expand' : 'Collapse'}
+          <span aria-hidden="true">{collapsed ? 'v' : '^'}</span>
         </button>
       </div>
       {!collapsed && (

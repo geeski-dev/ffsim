@@ -99,7 +99,8 @@
 }
 .panel-header h2 { margin: 0; display: flex; align-items: center; gap: 2px; }
 .collapse-toggle {
-  flex: none; padding: 5px 10px; border: 1px solid var(--rule); border-radius: 4px;
+  flex: none; width: 28px; height: 28px; padding: 0; border: 1px solid var(--rule); border-radius: 4px;
+  display: inline-flex; align-items: center; justify-content: center;
   background: var(--surface-alt); color: var(--ink); font: inherit; font-size: 0.82rem; font-weight: 600;
   cursor: pointer;
 }

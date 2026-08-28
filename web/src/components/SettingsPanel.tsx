@@ -69,9 +69,10 @@ export default function SettingsPanel({ settings, onChange, onReset, draftMode, 
           type="button"
           className="collapse-toggle"
           aria-expanded={!collapsed}
+          aria-label={collapsed ? 'Expand settings' : 'Collapse settings'}
           onClick={() => onCollapsedChange(!collapsed)}
         >
-          {collapsed ? 'Expand' : 'Collapse'}
+          <span aria-hidden="true">{collapsed ? 'v' : '^'}</span>
         </button>
       </div>
 

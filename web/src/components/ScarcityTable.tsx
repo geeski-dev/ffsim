@@ -17,9 +17,10 @@ export default function ScarcityTable({ rows }: Props) {
           type="button"
           className="collapse-toggle"
           aria-expanded={!collapsed}
+          aria-label={collapsed ? 'Expand positional scarcity' : 'Collapse positional scarcity'}
           onClick={() => setCollapsed(!collapsed)}
         >
-          {collapsed ? 'Expand' : 'Collapse'}
+          <span aria-hidden="true">{collapsed ? 'v' : '^'}</span>
         </button>
       </div>
       {!collapsed && (
