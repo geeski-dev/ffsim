@@ -119,6 +119,94 @@ an age-scaled floor on `down_spread`, not hand-entered per-player values.
 **Falsified if:** 28+ backs as a cohort hit their projections at the same rate
 as under-28 backs. Testable directly once historical ADP lands.
 
+### CL-004 — `swing_picks` should relax `ev_cap`, not double `ceiling_weight`. READY.
+**Term:** `ev_cap`, at the picks named in `swing_picks`.
+**The defect:** `swing_picks` currently doubles `ceiling_weight` at named picks.
+At Extreme variance `ceiling_weight` is already 1.0, so doubling-then-capping
+is a mathematical no-op — the parameter does nothing at exactly the setting it
+exists for. Found by Claude while wiring the Variance knob, flagged rather than
+silently patched.
+**The fix is a redesign, not a patch.** A swing pick does not mean "chase more
+ceiling" — it means **"accept a worse median for a shot at upside,"** and that
+is `ev_cap`'s job. `ev_cap` governs how far below the best available median you
+may reach; relaxing it at named picks is exactly the intended behaviour.
+**Falsified if:** relaxing `ev_cap` at swing picks produces no change in the
+drafted roster.
+
+---
+
+## OPEN PROBLEM — we have no projectable indicator of a high ceiling
+
+**This is the deepest open problem in the system and it must not be quietly
+dropped.** The entire ceiling-seeking strategy — the Variance knob,
+`ceiling_weight`, `vor_p85`, the case for aggression — rests on being able to
+identify which players have high upside *before* the season. We currently
+cannot.
+
+### What has been tested, and failed
+
+Every candidate measures some kind of uncertainty. Each is scored on whether it
+predicts a player's realised ceiling (best game, P90) the following season,
+**controlling for how good the player is** — because without that control every
+measure is just re-measuring quality.
+
+| candidate | source | persists yr/yr | predicts next ceiling, controlling for level |
+|---|---|---|---|
+| `weekly_cv` — in-season variance | HIST_01, n=1,743 | 0.362 | **+0.082** |
+| `top3_share` — concentration | HIST_01, n=1,743 | 0.317 | **+0.062** |
+| skew `(mean−median)/mean` | HIST_01, n=1,743 | 0.178 | not tested — doesn't persist |
+| spike rate, `% weeks > 1.5× own mean` | HIST_01, n=1,743 | 0.129 | not tested — noise |
+| `ecr_sd` — expert disagreement | HIST_05, n=608 | — | **+0.124** |
+
+For scale: **level itself predicts next season's best game at +0.49 to +0.52.**
+
+Three independent measures, three different data sources, three different kinds
+of uncertainty — all collapse to roughly +0.1 once level is controlled for.
+
+### Two traps this search keeps falling into
+
+1. **Raw correlations are negative.** `weekly_cv` correlates −0.274 with next
+   season's best game. That is not "variance hurts upside" — high CV mostly
+   means a low mean, and low-mean players have low ceilings. The denominator
+   trap, again.
+2. **`top3_share` and `weekly_cv` correlate at 0.857.** Measures that look
+   conceptually different are often the same number wearing a different name.
+   Check redundancy before adding a second one.
+
+### The uncomfortable implication
+
+**The best available predictor of a player's ceiling is how good he is.** If
+that is the whole truth, then `vor_p85` adds nothing over `vor`, the Variance
+knob is largely cosmetic, and "chase upside" reduces to "draft better players".
+
+That may be the answer. It is not yet established, because one path remains
+untested.
+
+### What has NOT been tested
+
+- **`proj_spread` (cross-source projection disagreement)** — the quantity
+  `vor_p85` is actually built from. Untestable historically: no archived
+  projections exist. The closest analogue (`ecr_sd`) scored +0.124.
+- **Situation-based upside** — vacated volume, role change, a QB upgrade, an
+  injury ahead of a player on the depth chart. This is the most promising
+  remaining direction precisely because it is *not* a variance measure. It asks
+  "what could change" rather than "how much has he bounced around."
+  `08_VACATED_VOLUME.csv` and `CONTEXT_01_TEAM_CHANGES_2026` exist and neither
+  has been used.
+- **Age and breakout-window effects** — whether upside concentrates in specific
+  career years.
+
+### Consequences while it stays open
+
+- The Variance knob's tooltip must describe what it does **mechanically**
+  ("shifts your valuation from a player's median outcome toward his high one")
+  and must not imply that chasing ceiling is established to win.
+- No entry may claim to identify upside until something clears the level
+  control by a meaningful margin.
+- **Do not re-propose "use skew instead of variance."** It was tested on
+  1,743 player-seasons and it does not persist. Re-run the table above before
+  proposing any new uncertainty measure.
+
 ---
 
 ## Open
