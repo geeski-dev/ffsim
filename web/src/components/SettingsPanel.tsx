@@ -7,6 +7,8 @@ interface Props {
   onChange: (next: LeagueSettings) => void;
   onReset: () => void;
   draftMode: boolean;
+  collapsed: boolean;
+  onCollapsedChange: (collapsed: boolean) => void;
 }
 
 const SCORING_OPTIONS: { value: LeagueSettings['scoring']; label: string }[] = [
@@ -32,7 +34,7 @@ const MODEL_INFLUENCE_OPTIONS: { value: ModelInfluence; label: string }[] = [
   { value: 'Extreme', label: 'Extreme (our board)' },
 ];
 
-export default function SettingsPanel({ settings, onChange, onReset, draftMode }: Props) {
+export default function SettingsPanel({ settings, onChange, onReset, draftMode, collapsed, onCollapsedChange }: Props) {
   // Re-locks every time you enter draft mode -- state, not a ref (see
   // PlayerBoard's own comment on why: a ref mutated during render is not
   // safe under StrictMode's double-invoked render pass). Never auto-unlocks
@@ -61,6 +63,18 @@ export default function SettingsPanel({ settings, onChange, onReset, draftMode }
 
   return (
     <div className="panel settings-bar">
+      <div className="panel-header">
+        <h2>Settings</h2>
+        <button
+          type="button"
+          className="collapse-toggle"
+          aria-expanded={!collapsed}
+          onClick={() => onCollapsedChange(!collapsed)}
+        >
+          {collapsed ? 'Expand' : 'Collapse'}
+        </button>
+      </div>
+
       {/* Row 1: the two knobs -- what the user actually touches, and the
           product's point of difference. They get their own row, on top,
           not buried under roster plumbing. */}
@@ -107,108 +121,112 @@ export default function SettingsPanel({ settings, onChange, onReset, draftMode }
         </button>
       </div>
 
-      {settings.model_influence === 'Off' && (
-        <p className="settings-note">
-          Off shows the consensus board. We aren't asserting we're right — that's the only
-          setting whose behavior has actually been measured.
-        </p>
-      )}
+      {!collapsed && (
+        <>
+          {settings.model_influence === 'Off' && (
+            <p className="settings-note">
+              Off shows the consensus board. We aren't asserting we're right — that's the only
+              setting whose behavior has actually been measured.
+            </p>
+          )}
 
-      {/* Rows 2+3 share one wrapping flex container on purpose -- on wide
-          viewports they read as a single continuous line, on narrow ones
-          they wrap onto as many lines as they need. */}
-      <div className="settings-row settings-row-league">
-        <div className="settings-field">
-          <label htmlFor="teams-select">Teams</label>
-          <Tooltip id="teams" />
-          <select id="teams-select" value={settings.teams} onChange={(e) => update({ teams: Number(e.target.value) })}>
-            {teamOptions.map((n) => (
-              <option key={n} value={n}>{n}</option>
-            ))}
-          </select>
-        </div>
+          {/* Rows 2+3 share one wrapping flex container on purpose -- on wide
+              viewports they read as a single continuous line, on narrow ones
+              they wrap onto as many lines as they need. */}
+          <div className="settings-row settings-row-league">
+            <div className="settings-field">
+              <label htmlFor="teams-select">Teams</label>
+              <Tooltip id="teams" />
+              <select id="teams-select" value={settings.teams} onChange={(e) => update({ teams: Number(e.target.value) })}>
+                {teamOptions.map((n) => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+            </div>
 
-        <div className="settings-field">
-          <label htmlFor="scoring-select">Scoring</label>
-          <Tooltip id="scoring" />
-          <select
-            id="scoring-select"
-            value={settings.scoring}
-            onChange={(e) => update({ scoring: e.target.value as LeagueSettings['scoring'] })}
-          >
-            {SCORING_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
-        </div>
+            <div className="settings-field">
+              <label htmlFor="scoring-select">Scoring</label>
+              <Tooltip id="scoring" />
+              <select
+                id="scoring-select"
+                value={settings.scoring}
+                onChange={(e) => update({ scoring: e.target.value as LeagueSettings['scoring'] })}
+              >
+                {SCORING_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
 
-        <div className="settings-field">
-          <label htmlFor="slot-select">Draft slot</label>
-          <Tooltip id="draft-slot" />
-          <select id="slot-select" value={settings.slot} onChange={(e) => update({ slot: Number(e.target.value) })}>
-            {slotOptions.map((n) => (
-              <option key={n} value={n}>{n}</option>
-            ))}
-          </select>
-        </div>
+            <div className="settings-field">
+              <label htmlFor="slot-select">Draft slot</label>
+              <Tooltip id="draft-slot" />
+              <select id="slot-select" value={settings.slot} onChange={(e) => update({ slot: Number(e.target.value) })}>
+                {slotOptions.map((n) => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+            </div>
 
-        <div className="settings-field">
-          <label htmlFor="playoff-select">Playoff teams</label>
-          <Tooltip id="playoff-teams" />
-          <select
-            id="playoff-select"
-            value={settings.playoff_teams}
-            onChange={(e) => update({ playoff_teams: Number(e.target.value) })}
-          >
-            {[2, 4, 6].map((n) => (
-              <option key={n} value={n}>{n}</option>
-            ))}
-          </select>
-        </div>
+            <div className="settings-field">
+              <label htmlFor="playoff-select">Playoff teams</label>
+              <Tooltip id="playoff-teams" />
+              <select
+                id="playoff-select"
+                value={settings.playoff_teams}
+                onChange={(e) => update({ playoff_teams: Number(e.target.value) })}
+              >
+                {[2, 4, 6].map((n) => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+            </div>
 
-        <div className="settings-field settings-field-narrow">
-          <label htmlFor="bench-input">Bench</label>
-          <Tooltip id="bench-size" />
-          <input
-            id="bench-input"
-            type="number"
-            min={0}
-            value={settings.bench}
-            onChange={(e) => update({ bench: Number(e.target.value) })}
-          />
-        </div>
+            <div className="settings-field settings-field-narrow">
+              <label htmlFor="bench-input">Bench</label>
+              <Tooltip id="bench-size" />
+              <input
+                id="bench-input"
+                type="number"
+                min={0}
+                value={settings.bench}
+                onChange={(e) => update({ bench: Number(e.target.value) })}
+              />
+            </div>
 
-        <div className="settings-field settings-field-narrow">
-          <label htmlFor="reserved-input">K/DST</label>
-          <Tooltip id="reserved-slots" />
-          <input
-            id="reserved-input"
-            type="number"
-            min={0}
-            value={settings.reserved_slots}
-            onChange={(e) => update({ reserved_slots: Number(e.target.value) })}
-          />
-        </div>
+            <div className="settings-field settings-field-narrow">
+              <label htmlFor="reserved-input">K/DST</label>
+              <Tooltip id="reserved-slots" />
+              <input
+                id="reserved-input"
+                type="number"
+                min={0}
+                value={settings.reserved_slots}
+                onChange={(e) => update({ reserved_slots: Number(e.target.value) })}
+              />
+            </div>
 
-        <div className="settings-field lineup-field">
-          <label>Lineup</label>
-          <Tooltip id="starting-lineup" />
-          <div className="lineup-steppers">
-            {LINEUP_POSITIONS.map((pos) => (
-              <label key={pos} className="lineup-stepper">
-                <span>{pos}</span>
-                {pos === 'FLEX' && <Tooltip id="flex" />}
-                <input
-                  type="number"
-                  min={0}
-                  value={settings.lineup[pos]}
-                  onChange={(e) => updateLineup(pos, Number(e.target.value))}
-                />
-              </label>
-            ))}
+            <div className="settings-field lineup-field">
+              <label>Lineup</label>
+              <Tooltip id="starting-lineup" />
+              <div className="lineup-steppers">
+                {LINEUP_POSITIONS.map((pos) => (
+                  <label key={pos} className="lineup-stepper">
+                    <span>{pos}</span>
+                    {pos === 'FLEX' && <Tooltip id="flex" />}
+                    <input
+                      type="number"
+                      min={0}
+                      value={settings.lineup[pos]}
+                      onChange={(e) => updateLineup(pos, Number(e.target.value))}
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
+        </>
+      )}
     </div>
   );
 }

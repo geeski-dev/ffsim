@@ -68,6 +68,7 @@ export default function App() {
   );
   const [league, setLeague] = useState<LeagueResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [settingsCollapsed, setSettingsCollapsed] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requestIdRef = useRef(0);
   const draft = useDraftState();
@@ -77,6 +78,7 @@ export default function App() {
   // target_pick (see the design note this was built against: "not
   // hardcoded... the user's next pick as the default").
   const [targetPick, setTargetPick] = useState<number | null>(null);
+  const boardAreaRef = useRef<HTMLDivElement>(null);
   const nextPickPanelRef = useRef<HTMLDivElement>(null);
 
   function selectPick(pick: number) {
@@ -115,6 +117,18 @@ export default function App() {
     setMode('about');
   }, []);
 
+  useEffect(() => {
+    if (mode === 'about') return;
+    function collapseAfterBoardScroll() {
+      const boardTop = boardAreaRef.current?.getBoundingClientRect().top;
+      if (boardTop !== undefined && boardTop < window.innerHeight * 0.35) {
+        setSettingsCollapsed(true);
+      }
+    }
+    window.addEventListener('scroll', collapseAfterBoardScroll, { passive: true });
+    return () => window.removeEventListener('scroll', collapseAfterBoardScroll);
+  }, [mode]);
+
   const handleBoardStateChange = useCallback((next: BoardState) => {
     setBoardState(next);
   }, []);
@@ -129,6 +143,7 @@ export default function App() {
   function resetSettings() {
     setSettings(DEFAULT_SETTINGS);
     setBoardState(DEFAULT_BOARD_STATE);
+    setSettingsCollapsed(false);
     setMode('board');
   }
 
@@ -195,6 +210,8 @@ export default function App() {
               onChange={handleSettingsChange}
               onReset={resetSettings}
               draftMode={mode === 'draft'}
+              collapsed={settingsCollapsed}
+              onCollapsedChange={setSettingsCollapsed}
             />
             {mode === 'draft' && (
               <div className="panel draft-status-bar">
@@ -208,7 +225,7 @@ export default function App() {
           </>
         )}
 
-        <div className="board-area">
+        <div className="board-area" ref={boardAreaRef}>
           {mode === 'about' && (
             <div className="panel">
               <AboutPage />
@@ -229,9 +246,6 @@ export default function App() {
                   <DraftPosition
                     picks={league.picks}
                     hedgeWindow={league.hedge_window}
-                    rounds={league.rounds}
-                    reservedSlots={league.reserved_slots}
-                    totalRounds={league.total_rounds}
                     selectedPick={mode === 'draft' ? targetPick : undefined}
                     onSelectPick={mode === 'draft' ? selectPick : undefined}
                   />

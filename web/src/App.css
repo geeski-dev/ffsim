@@ -92,12 +92,27 @@
 .board-area { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
 
 .panel { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 16px; color: var(--ink); margin-bottom: 24px; }
+.board-area .panel { margin-bottom: 0; }
 .panel h2 { margin-top: 0; font-size: 1.1rem; color: var(--ink); }
+.panel-header {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px;
+}
+.panel-header h2 { margin: 0; display: flex; align-items: center; gap: 2px; }
+.collapse-toggle {
+  flex: none; padding: 5px 10px; border: 1px solid var(--rule); border-radius: 4px;
+  background: var(--surface-alt); color: var(--ink); font: inherit; font-size: 0.82rem; font-weight: 600;
+  cursor: pointer;
+}
+.collapse-toggle:hover,
+.collapse-toggle:focus-visible {
+  border-color: var(--primary); color: var(--primary);
+}
 
 /* Settings bar -- horizontal, full width, same width as the board below it.
-   Target ~140px tall: two/three flex rows instead of a tall sidebar of
-   individually-labelled fields. Nothing here is hidden behind a disclosure. */
+   Target ~140px tall when expanded: two/three flex rows instead of a tall
+   sidebar of individually-labelled fields. */
 .settings-bar { padding: 8px 16px; margin-bottom: 24px; }
+.settings-bar .panel-header { margin-bottom: 10px; }
 .settings-row { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 16px; }
 .settings-row-knobs { margin-bottom: 10px; }
 .settings-row-knobs .reset-settings { margin-left: auto; width: auto; }
