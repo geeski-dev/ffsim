@@ -3,8 +3,9 @@
 Adapted from the ChatGPT-authored spec (28 Aug 2026) to match this codebase.
 The banner's visual design is unchanged. What changed is everything the original
 spec assumed about the repo, plus the structural decisions it
-left open, which Grant has now resolved (§2). It covers three things that ship
-together: the full-width banner, the tab-row navigation, and the SPA conversion.
+left open, which Grant has now resolved (§2). It covers four things that ship
+together: the full-width banner, the tab-row navigation, the SPA conversion, and
+one tooltip bug fix that lands in a file this work already edits.
 
 **Read `docs/design/banner-reference.html` first.** Open it in a browser. It is
 not a mockup or a reconstruction — it is the live reference's own markup and CSS,
@@ -85,13 +86,13 @@ block resolve against `.banner-shell`. Miss this and `cqw` falls back to the
 small-viewport font size, so the logo comes out at its 205px minimum at every
 width.
 
-### 2.2 Navigation — three uniform tabs above Settings
+### 2.2 Navigation — four uniform tabs above Settings
 
-**Decision (Grant, 29 Aug):** Board, Draft and About all sit together in one
-row, directly above `SettingsPanel`, identically styled. They read as tabs. The
-banner carries no navigation at all — logo only.
+**Decision (Grant, 29 Aug):** Board, Draft, Simulate and About all sit together
+in one row, directly above `SettingsPanel`, identically styled. They read as
+tabs. The banner carries no navigation at all — logo only.
 
-    [ Board | Draft | About ]
+    [ Board | Draft | Simulate | About ]
 
 - One bordered container, shared rounding, segments divided by `--rule` rather
   than gapped. Today's `.mode-toggle` is `display:flex; gap:4px` with
@@ -103,12 +104,11 @@ banner carries no navigation at all — logo only.
   — the selected tab can carry a restrained version of `.draft-banner__edge`'s
   glow (`box-shadow: 0 0 16px rgba(24,239,125,.26)`). Restrained. If it competes
   with the banner for attention it is wrong.
-- **Build it to hold four, not three.** Simulate is coming (item 2 of the
-  draft-mode UI/UX pass). Do not add it here — just do not write layout that
-  assumes a fixed count.
+- Do not write layout that assumes a fixed count; more may follow.
+- Check it does not wrap at 390px. Four tabs is where that starts to bite.
 
-On the About page the same three tabs render in the same position with About
-selected, so the row never moves or changes shape between views.
+The same four tabs render in the same position in every mode, so the row never
+moves or changes shape between views.
 
 ### 2.3 About becomes a mode (SPA conversion)
 
@@ -117,7 +117,7 @@ mode rendered by a component swap, not a route. All three tabs then behave
 identically, which is what the uniform styling promises.
 
 ```
-type AppMode = 'board' | 'draft' | 'about';
+type AppMode = 'board' | 'draft' | 'simulate' | 'about';
 ```
 
 `AboutPage` is already a component; render it in place of the board when
@@ -204,8 +204,8 @@ anchor-scroll effect above takes precedence when there is an anchor.
 #### Persistence and deep links
 
 - **Do not persist `'about'`** to `localStorage`. Mode is restored on load and
-  landing on About after a reload is nobody's intent. Persist board/draft only;
-  anything else falls back to `'board'`.
+  landing on About after a reload is nobody's intent. Persist board, draft and
+  simulate; `'about'` and anything unrecognised fall back to `'board'`.
 - **Keep `/about` as a deep link.** Read `pathname` at mount to seed the initial
   mode so links already shared still land correctly.
 - Updating the URL via `history.pushState` on tab click is optional. If you skip
@@ -226,15 +226,69 @@ Render it inside `.board-area`, in a `.panel`. `.about-page` already sets
 `max-width: 720px`, which sits correctly inside a full-width panel — the card
 matches the other panels, the text keeps a comfortable measure.
 
-**Recommendation, confirm before building:** in about mode, hide the tagline,
-the intro paragraph, `SettingsPanel` and `SimulationPanel`. None of them mean
-anything next to a text page, and leaving them makes the tab switch feel like a
-different app rather than a different tab. What stays constant is banner → tab
-row → panel, which is the consistency being asked for.
+In about mode, hide the tagline, the intro paragraph and `SettingsPanel`. None
+of them mean anything next to a text page, and leaving them makes the tab switch
+feel like a different app rather than a different tab. What stays constant is
+banner → tab row → panel, which is the consistency being asked for.
+(`SimulationPanel` is no longer on the page at all in about mode — see §2.3.2.)
 
 Item 4 of the draft-mode UI/UX pass (About page visual structure — green
 headers, soft-green dividers) targets this same component and should land in the
 same pass rather than fighting this one.
+
+### 2.3.2 Simulate becomes a mode — relocation only
+
+**Decision (Grant, 29 Aug):** the simulator becomes the third tab. This is what
+finally fixes item 2 of the draft-mode UI/UX pass — the simulator currently
+renders at the very bottom of the page below everything else, which is why Grant,
+who commissioned the app, has never once interacted with it.
+
+`SimulationPanel` already exists and already takes `settings`. This is a move,
+not a rebuild:
+
+- Remove `<SimulationPanel />` from the bottom of the main return, where it
+  currently sits outside `.board-area`.
+- Render it in place of the board when `mode === 'simulate'`.
+- Persist `'simulate'` to `localStorage` like board and draft. It is a working
+  mode someone can reasonably be in when they close the tab. Only `'about'` is
+  excluded (§ Persistence).
+
+**`SettingsPanel` stays visible in simulate mode.** Changing league settings and
+re-running is the entire point of the simulator — it is not like About, where
+the settings bar is meaningless. Visible in board, draft and simulate; hidden
+only in about.
+
+**Scope boundary — do not redesign the simulator.** Relocate it and stop. The
+open questions from the UX pass (does it need its own settings, what single
+number should it lead with, is "Simulate" even the right word for a layman) are
+deliberately unanswered and belong to that pass, not this one. If the panel
+looks thin standing on its own as a whole tab, say so in your report rather than
+filling it in.
+
+### 2.3.3 Tooltip hover gap — fix it while you are in this file
+
+A live bug, unrelated to the banner, but it lives in `Tooltip.tsx`, which §2.3
+already edits. Fixing it separately would conflict; fix it here.
+
+**Symptom.** Hover the "?" glyph, move the cursor toward the popover to click
+"Learn more", and the tooltip vanishes first. Fails roughly 90% of attempts.
+
+**Cause.** A side effect of the earlier portal fix, not a new regression. The
+popover now renders into `document.body` rather than inside `.tooltip-wrap`, so
+the wrapper's `onMouseLeave` fires the instant the cursor leaves the glyph — and
+moving toward the popover *is* leaving the wrapper. The popover has no hover
+handlers of its own because it used to be a child of the element that had them.
+
+**Fix, two parts:**
+
+1. Give the portalled popover its own `onMouseEnter` / `onMouseLeave`.
+2. Add a ~200ms close delay on leave, cancelled if the cursor enters either the
+   trigger or the popover. That covers the physical gap between them without
+   needing a full "safe triangle" implementation.
+
+Do not close the gap by removing the 6px offset — that trades this bug for a
+cramped popover. Clear the timer on unmount. Keyboard focus and Escape
+behaviour must not change.
 
 ### 2.4 Collapsed variant in draft mode
 
@@ -347,13 +401,19 @@ and confirm it does **not** animate on load.
 
 **SPA checks** (§2.3) — every one of these must happen without a page load:
 
-- each of the three tabs, in both directions;
+- each of the four tabs, in every direction;
 - "Learn more →" from a tooltip in `PlayerBoard`, and again from one in
   `SettingsPanel`, landing on the right anchor both times;
 - cmd-click / middle-click on a tooltip "Learn more" still opens a real tab;
 - cold load of `/about` lands on the About tab; cold load of
   `/about#confidence` also scrolls to that section;
-- reload while on About comes back to Board, not About.
+- reload while on About comes back to Board, not About;
+- reload while on Simulate comes back to Simulate.
+
+**Tooltip hover fix** (§2.3.3): hover a "?" glyph, move the cursor across the
+gap onto the popover, click "Learn more". Ten times. It should work every time,
+not nine in ten. Then confirm Escape still closes, focus still opens, and
+clicking outside still dismisses.
 
 **If you have browser control**, capture each width and compare against
 `banner-reference.html` at the same width — same page, same widths, direct
@@ -376,8 +436,10 @@ results.
    real browser or not.
 3. Confirmation that all four navigation exits (§2.3) are converted — name them
    — and that no tab click produces a page load.
-4. Whether you implemented `history.pushState` on tab click or left the URL
+4. Whether the simulator looks thin as a standalone tab (§2.3.2), and the
+   tooltip hover fix's hit rate over ten attempts (§2.3.3).
+5. Whether you implemented `history.pushState` on tab click or left the URL
    stale.
-5. `npm run build` and `npm run lint` results.
-6. Whether the collapse transition janks, and on what.
-7. Any deliberate deviation from `banner-reference.html`, and why.
+6. `npm run build` and `npm run lint` results.
+7. Whether the collapse transition janks, and on what.
+8. Any deliberate deviation from `banner-reference.html`, and why.
