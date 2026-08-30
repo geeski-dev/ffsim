@@ -376,11 +376,9 @@ client.
 
 ## 4. Running it
 
-`cd web && npm run dev`. The dev server proxies `/api` to `localhost:8000`, so
-unless the FastAPI server is also running the board shows "Could not reach the
-API". **That is expected and is not a regression** — the banner renders
-regardless. For the full page, from the repo root:
-`uvicorn api.main:app --reload`.
+`make dev` from the repo root. It starts both the FastAPI server on
+`localhost:8000` and the Vite frontend, whose dev server proxies `/api` to the
+backend.
 
 ---
 
@@ -421,8 +419,8 @@ comparison. **If you do not**, say so plainly rather than implying you checked.
 Do not add Playwright or screenshot tooling to this repo for this task; leave
 Grant a short list of what to look at and at which widths.
 
-**Checks that exist:** `npm run build` (`tsc -b && vite build`) and `npm run
-lint` (oxlint). Both must pass. There is no test suite — do not report test
+**Checks that exist:** `npm run build-dev` (`tsc -b && vite build`) and `npm
+run lint` (oxlint). Both must pass. There is no test suite — do not report test
 results.
 
 **Commit before moving on**, so progress is not lost if the session dies.
@@ -440,6 +438,6 @@ results.
    tooltip hover fix's hit rate over ten attempts (§2.3.3).
 5. Whether you implemented `history.pushState` on tab click or left the URL
    stale.
-6. `npm run build` and `npm run lint` results.
+6. `npm run build-dev` and `npm run lint` results.
 7. Whether the collapse transition janks, and on what.
 8. Any deliberate deviation from `banner-reference.html`, and why.

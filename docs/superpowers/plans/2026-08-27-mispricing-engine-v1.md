@@ -926,13 +926,13 @@ python check_pool.py 2>&1 | sed -n '/^7\./,/^$/p'   # record positional alpha me
 ```bash
 cd ~/Code/ffsim/web
 npx tsc --noEmit   # zero errors
-npm run build      # succeeds, dist/ produced
+npm run build-dev      # succeeds, dist/ produced
 ```
 
 - [ ] **Step 3: Start the app and drive it in a real browser**
 
 ```bash
-cd ~/Code/ffsim && ./dev.sh &
+cd ~/Code/ffsim && make dev &
 ```
 
 Navigate to `http://localhost:5173` and confirm, item by item:

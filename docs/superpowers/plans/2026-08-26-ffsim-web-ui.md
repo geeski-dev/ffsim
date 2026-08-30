@@ -1174,17 +1174,17 @@ Expected: no errors.
 
 - [ ] **Step 7: Verify production build succeeds**
 
-Run: `cd ~/Code/ffsim/web && npm run build`
+Run: `cd ~/Code/ffsim/web && npm run build-dev`
 Expected: `dist/` produced, no errors.
 
 ---
 
-### Task 14: Root dev script — `dev.sh`
+### Task 14: Root dev command — `make dev`
 
 **Files:**
-- Create: `dev.sh` (repo root)
+- Create: `Makefile` target `dev`
 
-- [ ] **Step 1: Write the script**
+- [ ] **Step 1: Write the launcher**
 
 ```bash
 #!/usr/bin/env bash
@@ -1202,16 +1202,16 @@ uvicorn main:app --app-dir api --reload --port 8000 &
 wait
 ```
 
-- [ ] **Step 2: Make it executable**
+- [ ] **Step 2: Confirm no chmod is needed**
 
-Run: `chmod +x ~/Code/ffsim/dev.sh`
+Run: `# no chmod needed`
 
 - [ ] **Step 3: Verify it starts both processes**
 
-Run: `cd ~/Code/ffsim && ./dev.sh &`
+Run: `cd ~/Code/ffsim && make dev &`
 Then: `sleep 3 && curl -sI localhost:8000/docs | head -1 && curl -sI localhost:5173 | head -1`
 Expected: two `200 OK` (or `HTTP/1.1 200 OK`) responses.
-Then: `kill %1` (kills the `dev.sh` process group via the trap).
+Then: `kill %1` (kills the `make dev` process group via the trap).
 
 ---
 
@@ -1221,7 +1221,7 @@ Use the Playwright browser tools to drive the real running app — this is the "
 
 - [ ] **Step 1: Start both processes**
 
-Run: `cd ~/Code/ffsim && ./dev.sh &` and wait ~3s for both to be up.
+Run: `cd ~/Code/ffsim && make dev &` and wait ~3s for both to be up.
 
 - [ ] **Step 2: Navigate and confirm initial load**
 
@@ -1249,7 +1249,7 @@ Stop the API process only (`kill` the uvicorn job, leave `npm run dev` running),
 
 - [ ] **Step 8: Tear down**
 
-Run: `kill %1` (or locate and kill the `dev.sh` process group) to stop both servers.
+Run: `kill %1` (or locate and kill the `make dev` process group) to stop both servers.
 
 - [ ] **Step 9: Final commit** (if in a git repo)
 
