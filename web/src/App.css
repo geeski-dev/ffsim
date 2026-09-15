@@ -86,9 +86,6 @@
 .tagline-chase { color: var(--primary); }
 .tagline-resist { color: var(--bargain-negative); }
 
-.intro { color: var(--ink-mute); font-size: 0.95rem; line-height: 1.5; max-width: 900px; margin: 0 0 24px; }
-.intro strong { color: var(--ink); }
-
 .board-area { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
 
 .panel { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 16px; color: var(--ink); margin-bottom: 24px; }
