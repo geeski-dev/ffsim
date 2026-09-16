@@ -6,25 +6,25 @@ API's wire format stays stable even if ffsim's internal representation shifts.
 """
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_validator
 
 
 class LineupSettings(BaseModel):
-    QB: int = 1
-    RB: int = 2
-    WR: int = 2
-    TE: int = 1
-    FLEX: int = 1
+    QB: int = Field(1, ge=0, le=10)
+    RB: int = Field(2, ge=0, le=10)
+    WR: int = Field(2, ge=0, le=10)
+    TE: int = Field(1, ge=0, le=10)
+    FLEX: int = Field(1, ge=0, le=10)
 
 
 class LeagueSettingsRequest(BaseModel):
-    teams: int = 10
-    slot: int = 6
+    teams: int = Field(10, ge=2, le=32)
+    slot: int = Field(6, ge=1, le=32)
     scoring: Literal["half_ppr", "ppr", "standard"] = "half_ppr"
-    bench: int = 6
+    bench: int = Field(6, ge=0, le=30)
     lineup: LineupSettings = LineupSettings()
-    playoff_teams: int = 4
-    reserved_slots: int = 2
+    playoff_teams: int = Field(4, ge=0, le=32)
+    reserved_slots: int = Field(2, ge=0, le=30)
     # How much upside to chase in the model's own valuation. Independent of
     # model_influence below -- this shapes OUR number, model_influence
     # decides how much of our number vs. the market's you actually see.
@@ -34,6 +34,12 @@ class LeagueSettingsRequest(BaseModel):
     # not assert otherwise. Off = pure consensus board, arranged for your
     # league; Extreme = pure model valuation.
     model_influence: Literal["Off", "Low", "Medium", "High", "Extreme"] = "Off"
+
+    @model_validator(mode="after")
+    def _slot_within_teams(self) -> "LeagueSettingsRequest":
+        if self.slot > self.teams:
+            raise ValueError(f"slot {self.slot} is greater than teams {self.teams}")
+        return self
 
 
 class PickChip(BaseModel):
@@ -92,20 +98,22 @@ class LeagueResponse(BaseModel):
 
 
 class SimulateRequest(LeagueSettingsRequest):
-    strategies: List[str] = ["bpa", "balanced", "ceiling"]
-    n_sims: int = 100
+    strategies: List[str] = Field(["bpa", "balanced", "ceiling"], max_length=8)
+    # 5,000 is the run that settled the aggression question (docs/TEST_LOG.md);
+    # the ceiling must stay reachable.
+    n_sims: int = Field(100, ge=1, le=5000)
 
 
 class NextPickRequest(LeagueSettingsRequest):
-    gone: List[str] = []   # player_ids taken by anyone (includes `mine`)
-    mine: List[str] = []   # player_ids I've drafted -- drives roster need
-    current_pick: int = 1  # overall pick number happening right now
+    gone: List[str] = Field([], max_length=1000)  # player_ids taken by anyone (includes `mine`)
+    mine: List[str] = Field([], max_length=100)   # player_ids I've drafted -- drives roster need
+    current_pick: int = Field(1, ge=1)            # overall pick number happening right now
     # Which overall pick to compute availability for. None (the default)
     # means "my own next pick" -- the header's own framing. A future round-
     # chip click in DraftPosition will pass an explicit overall pick here to
     # preview availability at THAT pick instead; same endpoint, same
     # availability(df, pick) call, just a different target.
-    target_pick: Optional[int] = None
+    target_pick: Optional[int] = Field(None, ge=1)
 
 
 class NextPickPlayerRow(BaseModel):

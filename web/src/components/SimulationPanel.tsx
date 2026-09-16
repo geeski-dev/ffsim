@@ -48,7 +48,7 @@ export default function SimulationPanel({ settings }: Props) {
       </div>
       <label>
         Simulation count
-        <input type="number" min={1} value={nSims} onChange={(e) => setNSims(Number(e.target.value))} />
+        <input type="number" min={1} max={5000} value={nSims} onChange={(e) => setNSims(Number(e.target.value))} />
       </label>
       <div className="run-row">
         <button onClick={runSim} disabled={loading || selected.length === 0}>

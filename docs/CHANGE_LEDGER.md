@@ -222,3 +222,28 @@ untested.
   FantasyPros expert dispersion (`ecr_sd`) now that
   `HIST_05_FP_ECR_PRESEASON_2021_2025.csv` is on disk.
 - No entry may move a real player's number until the backtest exists.
+
+### OPEN — risk-awareness is directionally right and too small to matter
+
+`test_backtest.py::test_chubb_2023_not_top3_by_risk_aware_vor` fails. It is kept
+failing.
+
+On the 2023 ECR-fit board, Chubb ranks **2nd** by risk-aware score. Real ADP had
+him 12th. The risk machinery is not absent: `miss_rate` was measured for 157/176
+players and `weekly_cv` for 156/176 over 2020-2022, so he was scored on real
+data, not a positional default. CL-000 split `up_spread`/`down_spread` precisely
+so a risk-aware strategy could decline this bet, and after that fix landed it
+still doesn't.
+
+So this is not "the model can't see an ACL tear coming." The market declined the
+bet on preseason information alone. The finding is that the ECR-fit curve's
+positional-rank history dominates the risk and dispersion terms by enough that
+`risk_penalty` 0.25 and `downside_weight` cannot overcome it.
+
+**Falsified if:** raising `risk_penalty` or `downside_weight` enough to move
+Chubb past rank 3 leaves overall backtest performance unchanged or better. If it
+costs performance, the term is right and the aggregate is what matters — say so
+here and the check gets rewritten with that reasoning, not deleted.
+
+**Not fixed before the backtest exists.** Per this file's own rule: nothing moves
+a real player's number until it does.

@@ -100,8 +100,10 @@ That table is the `ffsim/` package. Alongside it, `api/` is a FastAPI service ex
 model, and `web/` is the React + TypeScript + Vite frontend — draft board, scarcity table,
 next-pick panel, a `useDraftState` hook, a typed API client, and versioned local state.
 
-`python3 validate.py` runs the full check suite. `make dev` runs the API and the frontend
-together.
+`make test` runs the automated assertion suite. `python3 validate.py` prints hand-computed
+diagnostics — pick maps, hedge windows — to read, not assert on. `make dev` runs the API and
+the frontend together. `make test-open` needs `data/raw/` and carries one deliberately failing
+check; see `docs/CHANGE_LEDGER.md`.
 
 ---
 

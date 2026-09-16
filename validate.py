@@ -1,11 +1,12 @@
 """Validation suite. Run before trusting anything the model says."""
 import sys
 from collections import Counter
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, "/home/claude/ffsim")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ffsim as ff
 from ffsim.draft import ARCHETYPES, run_draft
 
