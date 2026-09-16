@@ -16,6 +16,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from fastapi import FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
 
 import ffsim as ff
 from ffsim.valuation import effective_starters, replacement_levels
@@ -270,3 +271,12 @@ def api_simulate(req: SimulateRequest) -> SimulateResponse:
         for _, row in summary.iterrows()
     ]
     return SimulateResponse(results=results)
+
+
+# The built frontend (web/dist), served from the same origin as the API so a
+# deploy is one URL with no CORS. Mounted last: a mount at "/" is greedy and
+# would shadow any route registered after it. Skipped when dist/ hasn't been
+# built -- local dev serves the frontend from Vite, which proxies /api here.
+WEB_DIST = REPO_ROOT / "web" / "dist"
+if WEB_DIST.is_dir():
+    app.mount("/", StaticFiles(directory=WEB_DIST, html=True), name="web")

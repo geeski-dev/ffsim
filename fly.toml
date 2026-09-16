@@ -1,4 +1,4 @@
-app = "ffsim-api"
+app = "mispricing-engine"
 primary_region = "iad"
 
 [build]
@@ -12,7 +12,7 @@ primary_region = "iad"
   force_https = true
   auto_stop_machines = "stop"
   auto_start_machines = true
-  min_machines_running = 1 # Set to 0 in the offseason when cold starts are acceptable.
+  min_machines_running = 0 # Scales to zero when idle; the next request cold-starts a machine.
   processes = ["app"]
 
   [[http_service.checks]]

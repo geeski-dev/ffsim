@@ -1,6 +1,7 @@
 my_leagues.py
 data/raw/
-web/
+web/node_modules/
+web/dist/
 docs/
 tests/
 *.md
