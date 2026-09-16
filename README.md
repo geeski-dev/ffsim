@@ -1,7 +1,10 @@
-# ffsim
+# Mispricing Engine
 
-A parameterised fantasy football draft and season model. One config object drives
-everything — change the league, not the code.
+A parameterised fantasy football draft and season model, with a FastAPI service and a
+React + TypeScript draft board on top of it. One config object drives everything —
+change the league, not the code.
+
+![Draft board](docs/board.png)
 
 ```python
 import ffsim as ff
@@ -59,6 +62,19 @@ strategy, and the waiver model is where it shows up.
 **Championship equity, not total points.** H2H playoffs are a small-sample
 tournament. Scoring on points alone under-recommends variance.
 
+**Draft state survives a refresh; undo does not.** A refresh at pick 90 must not lose the
+draft, so `gone`, `mine` and draft position persist to localStorage behind a versioned
+reader that returns defaults for anything it doesn't recognise rather than trying to parse
+it. Undo history is deliberately not persisted — losing that on refresh is fine. Draft
+state and app settings use separate keys and version independently, so adding a field to
+one can never wipe the other.
+
+**Plain setState rather than functional updaters, on purpose.** Marking a player also
+pushes an undo entry, and a functional updater that has to write to an undo log must mutate
+something from inside the updater — which React invokes twice under StrictMode to check
+purity, applying that mutation twice. Every mark and undo here is one discrete user action,
+so a stale closure isn't a real risk and the simple version is the safe one.
+
 ---
 
 ## Layout
@@ -74,7 +90,12 @@ tournament. Scoring on points alone under-recommends variance.
 | `season.py` | weekly sim, injuries, waivers, H2H schedule, playoffs |
 | `engine.py` | orchestration, common random numbers, objective function |
 
-`python3 validate.py` runs the full check suite.
+That table is the `ffsim/` package. Alongside it, `api/` is a FastAPI service exposing the
+model, and `web/` is the React + TypeScript + Vite frontend — draft board, scarcity table,
+next-pick panel, a `useDraftState` hook, a typed API client, and versioned local state.
+
+`python3 validate.py` runs the full check suite. `make dev` runs the API and the frontend
+together.
 
 ---
 
