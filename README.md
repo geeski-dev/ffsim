@@ -28,6 +28,12 @@ Replacement level, tiers, positional values, the pick map, and the simulator all
 recompute from that object. Nothing downstream hardcodes a league size or a
 scoring rule.
 
+![Next pick](docs/next-pick.png)
+
+*The draft view. “Take now” and “Can wait” are the simulator's output — the
+probability each player survives to your next pick, given how the other teams
+in the room are likely to draft.*
+
 ---
 
 ## Why it's built this way
