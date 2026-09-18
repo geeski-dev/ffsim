@@ -67,7 +67,7 @@ def evaluate(pool: pd.DataFrame, league: League,
         strat_map = {name: PRESETS[name] for name in strategies}
 
     if field_ is None:
-        field_ = default_field(league, np.random.default_rng(seed))
+        field_ = default_field(league)
 
     records = []
     for sim in range(n_sims):

@@ -40,11 +40,6 @@ class Scoring:
     def standard(cls) -> "Scoring":
         return cls(reception=0.0)
 
-    @classmethod
-    def te_premium(cls, te_bonus: float = 0.5) -> "Scoring":
-        # TE premium is handled as a per-position adjustment in scoring.py
-        return cls(reception=0.5 + 0.0)
-
 
 DEFAULT_LINEUP: Dict[str, int] = {
     "QB": 1,

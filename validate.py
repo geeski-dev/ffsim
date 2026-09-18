@@ -47,8 +47,7 @@ print("\n  expect: 12-team > 10-team everywhere; PPR lifts WR/TE/RB, leaves QB f
 # ----------------------------------------------------------- positional runs
 hr("3. POSITIONAL RUNS  (a sim without cascades says 'you can always wait')")
 board = ff.build_board(pool, lg6)
-rng = np.random.default_rng(3)
-field_ = ff.default_field(lg6, rng)
+field_ = ff.default_field(lg6)
 runs, total = 0, 0
 for t in range(40):
     r = run_draft(board, lg6, ff.PRESETS["balanced"], field_, np.random.default_rng([3, t]))

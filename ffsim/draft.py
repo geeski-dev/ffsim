@@ -146,7 +146,7 @@ ARCHETYPES: Dict[str, Personality] = {
 }
 
 
-def default_field(league: League, rng) -> Dict[int, Personality]:
+def default_field(league: League) -> Dict[int, Personality]:
     """A plausible mix of opponents when you have no leaguemate intel."""
     names = ["adp", "adp", "sharp", "homer", "qb_early", "te_early",
              "rb_heavy", "zero_rb", "asleep", "adp", "sharp", "homer"]
@@ -182,7 +182,7 @@ class Strategy:
     ev_cap: float = 0.10             # max fraction of best-available VOR surrendered early
     swing_picks: tuple = ()          # overall pick numbers where ev_cap relaxes
 
-    def value_components(self, board: pd.DataFrame, overall: int = 0) -> Dict[str, np.ndarray]:
+    def value_components(self, board: pd.DataFrame) -> Dict[str, np.ndarray]:
         """The model's per-player value, independent of roster context.
 
         No positional need bonus, no legality/EV-cap masking -- those only
@@ -261,7 +261,7 @@ class Strategy:
                 if mask.any():
                     legal = mask
 
-        comp = self.value_components(board, overall)
+        comp = self.value_components(board)
         effective_vor = comp["effective_vor"]
 
         bonus = np.array([self.pos_bonus.get(p, 0.0) for p in pos])
@@ -355,8 +355,6 @@ def run_draft(board: pd.DataFrame, league: League, strategy: Strategy,
     recent = deque(maxlen=RUN_WINDOW)
     pos_arr = board["position"].to_numpy()
 
-    my_picks = set(league.pick_numbers())
-
     for overall in range(1, league.total_picks + 1):
         slot = league.slot_of_pick(overall)
         rnd = (overall - 1) // league.teams + 1
@@ -375,5 +373,4 @@ def run_draft(board: pd.DataFrame, league: League, strategy: Strategy,
         counts[slot][p] = counts[slot].get(p, 0) + 1
         recent.append(p)
 
-    assert my_picks  # pick map sanity
     return rosters

@@ -348,16 +348,15 @@ tr.row-mine:hover { background: color-mix(in srgb, var(--primary) 20%, transpare
 
 /* ----------------------------------------------------------------------
    Tooltip -- one component, same shape/size/styling everywhere. A small
-   glyph trigger (optionally preceded by a label) opens a popover with a
-   short description and a "Learn more" link into /about. Hover or focus
-   opens it; Escape or clicking outside closes it.
+   glyph trigger opens a popover with a short description and a "Learn
+   more" link into /about. Hover or focus opens it; Escape or clicking
+   outside closes it.
    ---------------------------------------------------------------------- */
 .tooltip-wrap { position: relative; display: inline-flex; vertical-align: middle; margin-left: 5px; }
 .tooltip-trigger {
   display: inline-flex; align-items: center; gap: 4px;
   background: none; border: none; padding: 0; margin: 0; cursor: pointer; font: inherit; color: inherit;
 }
-.tooltip-trigger-label { font-weight: inherit; }
 .tooltip-glyph {
   display: inline-flex; align-items: center; justify-content: center; flex: none;
   width: 1.15em; height: 1.15em; border-radius: 50%;

@@ -15,10 +15,6 @@ import { useAboutNavigation } from '../aboutNavigation';
 
 interface Props {
   id: TooltipId;
-  // Optional: render the trigger as an inline label with the info glyph
-  // after it, instead of a bare icon. Use where there's no adjacent label
-  // text already doing that job (e.g. a bare "?" next to a table header).
-  label?: string;
 }
 
 interface PopoverPosition {
@@ -36,7 +32,7 @@ const CLOSE_DELAY_MS = 200;
 // outside closes it (for touch, where there's no hover to fall back to).
 // The trigger uses aria-describedby so screen readers announce the short
 // description even for users who never interact with the popover at all.
-export default function Tooltip({ id, label }: Props) {
+export default function Tooltip({ id }: Props) {
   const entry = TOOLTIPS[id];
   const aboutNavigation = useAboutNavigation();
   const [open, setOpen] = useState(false);
@@ -210,7 +206,6 @@ export default function Tooltip({ id, label }: Props) {
         }}
         onFocus={openNow}
       >
-        {label ? <span className="tooltip-trigger-label">{label}</span> : null}
         <span className="tooltip-glyph" aria-hidden="true">?</span>
       </button>
       {/* No role="tooltip" here on purpose: that ARIA role forbids

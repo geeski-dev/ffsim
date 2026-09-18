@@ -15,14 +15,15 @@ observation would prove it wrong. An entry with no falsifier is not an entry.
 
 ## Hypotheses tested
 
-| id | claim | verdict | acted on |
-|----|-------|---------|----------|
-| H1 | Running backs decline with age faster than other positions, with a threshold | **CONFIRMED** | pending — CL-003 |
-| H2 | A receiver who gets open but isn't targeted is a situation problem a QB change fixes | **REJECTED** | no — correctly not implemented |
-| H3 | Tight ends recover from major knee injuries better than running backs | **UNANSWERABLE** | no |
+| id  | claim                                                                                | verdict          | acted on                       |
+| --- | ------------------------------------------------------------------------------------ | ---------------- | ------------------------------ |
+| H1  | Running backs decline with age faster than other positions, with a threshold         | **CONFIRMED**    | pending — CL-003               |
+| H2  | A receiver who gets open but isn't targeted is a situation problem a QB change fixes | **REJECTED**     | no — correctly not implemented |
+| H3  | Tight ends recover from major knee injuries better than running backs                | **UNANSWERABLE** | no                             |
 
 ### H1 — the aging cliff. CONFIRMED.
-5,582 player-seasons, 2012-2025, measured as median % of a player's *own*
+
+5,582 player-seasons, 2012-2025, measured as median % of a player's _own_
 career peak so talent is controlled for. Running backs fall off a cliff at 28:
 
     age    RB    TE    WR
@@ -36,6 +37,7 @@ sample — so it must not be read as recovery. This is the sole evidential basis
 for CL-003.
 
 ### H2 — the separation gap. REJECTED.
+
 The original -0.25 correlation was measuring role, not opportunity: every name
 in "open but not targeted" was a tight end or slot receiver, every name in
 "targeted despite not getting open" an outside X. Rebuilt with position,
@@ -48,6 +50,7 @@ he just needs a better quarterback" is not an admissible justification.
 See `test_h2_separation.py`.
 
 ### H3 — knee-injury recovery by position. UNANSWERABLE.
+
 The league publishes body parts, not diagnoses: there is no "ACL" anywhere in
 30,939 injury reports, only "Knee". Proxy used was a season-ending knee injury.
 Among players who were startable beforehand (6+ ppg), the sample is **three
@@ -56,6 +59,7 @@ tight ends, two of whom returned** (Ertz 64%, Hill 27%). No answer exists in
 prior production; that was ratio noise from four sub-3.3-ppg players.
 
 Two findings did survive, and neither concerns tight ends:
+
 - Running backs return almost always (10/10) but diminished — 67% of prior ppg.
 - Receivers are binary: 55% return at all, but ~97% of prior production if they do.
 
@@ -68,6 +72,7 @@ below. See `test_h3_knee_recovery.py`.
 ## Entries
 
 ### CL-000 — BUG: risk and upside were the same number. LANDED, verified.
+
 Not an adjustment; a defect. `p85` and `p15` were both built from
 `proj_spread`, symmetrically, while `draft.py` blends toward `vor_p85` as
 `ceiling_weight` rises. Flagging a player as risky therefore made the model
@@ -81,12 +86,14 @@ is unchanged: verified `p85 == proj x (1 + 1.036 x proj_spread)`, Bowers alpha
 42.8, Gibbs VOR 155.5 — identical to pre-change.
 
 ### CL-001 — McCaffrey's downside uncertainty. SUPERSEDED by CL-003.
+
 Kept for the reasoning. Age 30, two years past the H1 cliff, yet holding the
-*narrowest* `proj_spread` on the board at 0.04. The mean needs no correction —
+_narrowest_ `proj_spread` on the board at 0.04. The mean needs no correction —
 projection sources already age-adjust — and `miss_rate` 0.24 already carries the
 injury history. What was wrong was the confidence.
 
 ### CL-002 — QB replacement level. READY TO APPLY.
+
 **Term:** `replacement["QB"]`. A league-structure term, so it moves every
 quarterback at once rather than singling one out.
 **Move:** 292.5 -> ~313-318.
@@ -101,8 +108,9 @@ edge is real, just a quarter the size the board claims.
 **Falsified if:** the streamable pool is thinner in-season than history implies.
 
 ### CL-003 — Ageing backs: agreement is not confidence. BLOCKED -> now unblocked.
+
 **Term:** `down_spread` for RB, scaling with age. `up_spread` unchanged.
-**Evidence — H1, not H3.** The model is *more* certain about old backs than
+**Evidence — H1, not H3.** The model is _more_ certain about old backs than
 young ones: median `proj_spread` for RBs 28+ is **0.051**, for RBs under 28
 **0.063**. Backwards, and systematically so — projection sources agree most
 about veterans because they have the longest track records, which places peak
@@ -120,6 +128,7 @@ an age-scaled floor on `down_spread`, not hand-entered per-player values.
 as under-28 backs. Testable directly once historical ADP lands.
 
 ### CL-004 — `swing_picks` should relax `ev_cap`, not double `ceiling_weight`. LANDED.
+
 **Term:** `ev_cap`, at the picks named in `swing_picks`.
 **The defect:** `swing_picks` currently doubles `ceiling_weight` at named picks.
 At Extreme variance `ceiling_weight` is already 1.0, so doubling-then-capping
@@ -145,7 +154,7 @@ differing user-pick slots.
 **This is the deepest open problem in the system and it must not be quietly
 dropped.** The entire ceiling-seeking strategy — the Variance knob,
 `ceiling_weight`, `vor_p85`, the case for aggression — rests on being able to
-identify which players have high upside *before* the season. We currently
+identify which players have high upside _before_ the season. We currently
 cannot.
 
 ### What has been tested, and failed
@@ -155,13 +164,13 @@ predicts a player's realised ceiling (best game, P90) the following season,
 **controlling for how good the player is** — because without that control every
 measure is just re-measuring quality.
 
-| candidate | source | persists yr/yr | predicts next ceiling, controlling for level |
-|---|---|---|---|
-| `weekly_cv` — in-season variance | HIST_01, n=1,743 | 0.362 | **+0.082** |
-| `top3_share` — concentration | HIST_01, n=1,743 | 0.317 | **+0.062** |
-| skew `(mean−median)/mean` | HIST_01, n=1,743 | 0.178 | not tested — doesn't persist |
-| spike rate, `% weeks > 1.5× own mean` | HIST_01, n=1,743 | 0.129 | not tested — noise |
-| `ecr_sd` — expert disagreement | HIST_05, n=608 | — | **+0.124** |
+| candidate                             | source           | persists yr/yr | predicts next ceiling, controlling for level |
+| ------------------------------------- | ---------------- | -------------- | -------------------------------------------- |
+| `weekly_cv` — in-season variance      | HIST_01, n=1,743 | 0.362          | **+0.082**                                   |
+| `top3_share` — concentration          | HIST_01, n=1,743 | 0.317          | **+0.062**                                   |
+| skew `(mean−median)/mean`             | HIST_01, n=1,743 | 0.178          | not tested — doesn't persist                 |
+| spike rate, `% weeks > 1.5× own mean` | HIST_01, n=1,743 | 0.129          | not tested — noise                           |
+| `ecr_sd` — expert disagreement        | HIST_05, n=608   | —              | **+0.124**                                   |
 
 For scale: **level itself predicts next season's best game at +0.49 to +0.52.**
 
@@ -194,7 +203,7 @@ untested.
   projections exist. The closest analogue (`ecr_sd`) scored +0.124.
 - **Situation-based upside** — vacated volume, role change, a QB upgrade, an
   injury ahead of a player on the depth chart. This is the most promising
-  remaining direction precisely because it is *not* a variance measure. It asks
+  remaining direction precisely because it is _not_ a variance measure. It asks
   "what could change" rather than "how much has he bounced around."
   `08_VACATED_VOLUME.csv` and `CONTEXT_01_TEAM_CHANGES_2026` exist and neither
   has been used.
@@ -222,6 +231,42 @@ untested.
   FantasyPros expert dispersion (`ecr_sd`) now that
   `HIST_05_FP_ECR_PRESEASON_2021_2025.csv` is on disk.
 - No entry may move a real player's number until the backtest exists.
+  `build_pool.py` estimates cross-source disagreement from a value proxy built only
+  from receiving and rushing production:
+
+      tot = rec_yds*0.1 + rush_yds*0.1 + rec_td*6 + rush_td*6
+
+It omits `pass_yds` and `pass_td` entirely, and it does not fill NaN. Most
+projection sources leave the receiving columns blank for quarterbacks, so `tot`
+is NaN for most of a QB's source rows, `std()` over a single value returns NaN,
+and the row falls through to the flat default at the bottom of the block.
+
+**Measured against the shipped pool:**
+
+    position   measured   defaulted
+    QB                0          41
+    TE               15          35
+    WR               87          40
+    RB               71          15
+
+**Not one of 41 quarterbacks has a measured `proj_spread`.**
+
+This is not cosmetic. `proj_spread` feeds `up_spread`/`down_spread`, which feed
+`p85_points`/`p15_points`, which feed `vor_p85`/`vor_p15` — the whole ceiling and
+downside machinery, including everything the Variance knob moves. For QBs and most
+TEs that band is a constant wearing a measurement's clothes, which is precisely
+the failure this file exists to catch.
+
+The pipeline does warn when it defaults, so it is not silent. But the warning
+reports a count, not a position, and a positionally systematic miss reads as a
+data gap rather than a bug.
+
+**Falsified if:** adding `pass_yds*0.04 + pass_td*4` to the proxy and filling NaN
+per-column still leaves QB dispersion at the default. If it does, the problem is
+source coverage rather than the formula.
+
+**Not fixed yet.** The fix rebuilds both committed pools and every number
+downstream of them, so it happens with the backtest in front of it, not before.
 
 ### OPEN — risk-awareness is directionally right and too small to matter
 

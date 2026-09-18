@@ -2,16 +2,10 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { LineupSettings, ModelInfluence, PlayerRow, Variance } from '../api/types';
 import Tooltip from './Tooltip';
 import type { TooltipId } from '../tooltips';
-
-const BOARD_POSITIONS = ['All', 'QB', 'RB', 'WR', 'TE'] as const;
-// Draft mode collapses the filter to a couple of presets on purpose -- fewer
-// decisions during a live draft, not more. "Needed" is computed from mine +
-// the league's own lineup requirements (see neededPositions below).
-const DRAFT_POSITIONS = ['All', 'Needed'] as const;
+import { BOARD_POSITIONS, DRAFT_POSITIONS, type PositionFilter } from '../boardFilters';
 
 export type SortKey = 'name' | 'position' | 'team' | 'adp' | 'expert_rank' | 'expert_rank_lo' | 'our_value' | 'our_range_lo' | 'bargain';
 export type SortDirection = 'asc' | 'desc';
-export type PositionFilter = (typeof BOARD_POSITIONS)[number] | (typeof DRAFT_POSITIONS)[number];
 
 export interface BoardState {
   sortKey: SortKey;
@@ -132,11 +126,24 @@ export default function PlayerBoard({
   // the knobs in effect now against the knobs recorded the last time players
   // changed -- not when the dropdown fires (that render still holds the OLD
   // players array, which makes any diff computed there vacuously zero).
-  // State, not refs, throughout: mutating a ref during render is not safe
-  // under StrictMode's double-invoked render pass (the first pass's mutation
-  // is visible to the second pass, which then sees no change and silently
-  // drops the update) -- mirrors the pre-existing prevRiskProfile pattern in
-  // this file, which used state for exactly this reason.
+  // State, not refs, for the comparison below: mutating a ref during render
+  // is not safe under StrictMode's double-invoked render pass (the first
+  // pass's mutation is visible to the second pass, which then sees no change
+  // and silently drops the update) -- mirrors the pre-existing
+  // prevRiskProfile pattern in this file, which used state for exactly this
+  // reason.
+  //
+  // `shouldAnimate` is the one deliberate exception: it is a ref, and it is
+  // written during render. What makes the rule bite above is the
+  // read-modify-write -- a second pass comparing against a value the first
+  // pass already advanced. This write is an idempotent assignment of a
+  // constant (`= true`) that never reads the old value, so a double pass
+  // setting it twice is indistinguishable from setting it once. It stays a
+  // ref because the FLIP measurement in the layout effect needs the flag in
+  // the same commit that moved the rows, and because clearing it from inside
+  // that effect would cost an extra render on every board update. oxlint's
+  // react(refs) rule flags any render-phase ref access and does not
+  // distinguish this case.
   const [prevPlayers, setPrevPlayers] = useState(players);
   const [knobsAtLastPlayers, setKnobsAtLastPlayers] = useState({ variance, modelInfluence });
   // Lazy initializer -- captures the baseline from the FIRST players array
@@ -234,7 +241,6 @@ export default function PlayerBoard({
         if (before === undefined || after === undefined || before === after) return;
         el.style.transition = 'none';
         el.style.transform = `translateY(${before - after}px)`;
-        // eslint-disable-next-line @typescript-eslint/no-unused-expressions
         el.getBoundingClientRect(); // force reflow before releasing the transform
         el.style.transition = `transform ${ANIMATE_MS}ms ease`;
         el.style.transform = '';

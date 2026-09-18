@@ -6,6 +6,7 @@ import SettingsPanel from './components/SettingsPanel';
 import DraftPosition from './components/DraftPosition';
 import ScarcityTable from './components/ScarcityTable';
 import PlayerBoard, { type BoardState } from './components/PlayerBoard';
+import { positionFilterAppliesTo } from './boardFilters';
 import NextPickPanel from './components/NextPickPanel';
 import SimulationPanel from './components/SimulationPanel';
 import AboutPage from './components/AboutPage';
@@ -112,10 +113,25 @@ export default function App() {
     previousModeRef.current = mode;
   }, [mode, pendingAboutAnchor]);
 
+  // Every mode change goes through here. Board and draft mode offer different
+  // position chips, so a filter carried across the switch can end up applying
+  // with no chip to show it (see positionFilterAppliesTo) -- drop it in that
+  // case only, and leave a filter the incoming mode can display untouched.
+  const changeMode = useCallback((next: AppMode) => {
+    setMode(next);
+    if (next === 'board' || next === 'draft') {
+      setBoardState((current) =>
+        positionFilterAppliesTo(next, current.positionFilter)
+          ? current
+          : { ...current, positionFilter: 'All' },
+      );
+    }
+  }, []);
+
   const navigateToAbout = useCallback((anchor?: string) => {
     setPendingAboutAnchor(anchor ?? null);
-    setMode('about');
-  }, []);
+    changeMode('about');
+  }, [changeMode]);
 
   useEffect(() => {
     if (mode === 'about') return;
@@ -144,7 +160,7 @@ export default function App() {
     setSettings(DEFAULT_SETTINGS);
     setBoardState(DEFAULT_BOARD_STATE);
     setSettingsCollapsed(false);
-    setMode('board');
+    changeMode('board');
   }
 
   // Separate from resetSettings on purpose, and lives in a different place
@@ -189,13 +205,13 @@ export default function App() {
           )}
 
           <nav className="nav-tabs" aria-label="Primary">
-            <button type="button" className={mode === 'board' ? 'active' : ''} onClick={() => setMode('board')}>
+            <button type="button" className={mode === 'board' ? 'active' : ''} onClick={() => changeMode('board')}>
               Board
             </button>
-            <button type="button" className={mode === 'draft' ? 'active' : ''} onClick={() => setMode('draft')}>
+            <button type="button" className={mode === 'draft' ? 'active' : ''} onClick={() => changeMode('draft')}>
               Draft
             </button>
-            <button type="button" className={mode === 'simulate' ? 'active' : ''} onClick={() => setMode('simulate')}>
+            <button type="button" className={mode === 'simulate' ? 'active' : ''} onClick={() => changeMode('simulate')}>
               Simulate
             </button>
             <button type="button" className={mode === 'about' ? 'active' : ''} onClick={() => navigateToAbout()}>

@@ -16,7 +16,7 @@ summary, detail = ff.evaluate(pool, lg, ["bpa", "balanced", "ceiling"], n_sims=1
 print(summary)
 ```
 
-Every knob you asked for:
+The full set of knobs:
 
 ```python
 ff.League(teams=12, slot=3, scoring=ff.Scoring.ppr(), bench=7)
@@ -30,9 +30,9 @@ scoring rule.
 
 ![Next pick](docs/next-pick.png)
 
-*The draft view. “Take now” and “Can wait” are the simulator's output — the
+_The draft view. “Take now” and “Can wait” are the simulator's output — the
 probability each player survives to your next pick, given how the other teams
-in the room are likely to draft.*
+in the room are likely to draft._
 
 ---
 
@@ -40,8 +40,10 @@ in the room are likely to draft.*
 
 **Component-based scoring.** Projections are stored as receptions, yards and
 touchdowns — never as fantasy point totals. Re-scoring the same pool for full
-PPR is a multiply, not a re-collection. This is why the workbook spec asks
-ChatGPT for component stats.
+PPR is a multiply, not a re-collection. It is also why the data spec collects
+component stats rather than finished point totals — a projection published as
+points is already committed to someone else's scoring rules and cannot be
+re-scored at all.
 
 **Derived replacement level.** `valuation.replacement_levels` actually fills the
 league's starting lineups, flex included, then takes replacement as the average
@@ -85,20 +87,31 @@ so a stale closure isn't a real risk and the simple version is the safe one.
 
 ## Layout
 
-| File | Contains |
-|---|---|
-| `config.py` | `League`, `Scoring`, pick maps, hedge windows |
-| `scoring.py` | component stats → points under any scoring rule |
-| `pool.py` | player schema, validation, ceiling/risk indices |
+| File           | Contains                                                   |
+| -------------- | ---------------------------------------------------------- |
+| `config.py`    | `League`, `Scoring`, pick maps, hedge windows              |
+| `scoring.py`   | component stats → points under any scoring rule            |
+| `pool.py`      | player schema, validation, ceiling/risk indices            |
 | `synthetic.py` | stand-in pool with realistic scarcity and market structure |
-| `valuation.py` | replacement level, VOR, isotonic ADP curve, alpha, tiers |
-| `draft.py` | snake engine, opponent personalities, drafting policies |
-| `season.py` | weekly sim, injuries, waivers, H2H schedule, playoffs |
-| `engine.py` | orchestration, common random numbers, objective function |
+| `valuation.py` | replacement level, VOR, isotonic ADP curve, alpha, tiers   |
+| `draft.py`     | snake engine, opponent personalities, drafting policies    |
+| `season.py`    | weekly sim, injuries, waivers, H2H schedule, playoffs      |
+| `engine.py`    | orchestration, common random numbers, objective function   |
 
 That table is the `ffsim/` package. Alongside it, `api/` is a FastAPI service exposing the
 model, and `web/` is the React + TypeScript + Vite frontend — draft board, scarcity table,
 next-pick panel, a `useDraftState` hook, a typed API client, and versioned local state.
+
+## Setup
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r api/requirements.txt
+cd web && npm install && cd ..
+make dev
+```
+
+`make dev` expects `.venv/` to exist — it activates it rather than creating it.
 
 `make test` runs the automated assertion suite. `python3 validate.py` prints hand-computed
 diagnostics — pick maps, hedge windows — to read, not assert on. `make dev` runs the API and
@@ -118,16 +131,20 @@ adp adp_sd adp_min adp_max
 proj_games miss_rate weekly_cv proj_spread
 ```
 
-Which maps onto the workbook tabs as:
+Those columns are assembled by `build_pool.py` from the data workbook: a
+hand-collected set of numbered source tabs — projections, ADP, injury and age
+history, weekly consistency — exported one CSV per tab into the gitignored
+`data/raw/`. `docs/schema_report.txt` is the full inventory of what each tab
+holds. Columns map onto tabs as:
 
-| Column | Source tab |
-|---|---|
-| identity, bye | `01_PLAYERS`, `12_SCHEDULE_GRID` |
-| component stats, `proj_games` | `04_PROJECTIONS` (median across sources) |
-| `proj_spread` | `04_PROJECTIONS` (dispersion across sources) |
-| `adp*` | `02_ADP` |
-| `miss_rate` | `10_RISK_INJURY_AGE` |
-| `weekly_cv` | `06_WEEKLY_CONSISTENCY` |
+| Column                        | Source tab                                   |
+| ----------------------------- | -------------------------------------------- |
+| identity, bye                 | `01_PLAYERS`, `12_SCHEDULE_GRID`             |
+| component stats, `proj_games` | `04_PROJECTIONS` (median across sources)     |
+| `proj_spread`                 | `04_PROJECTIONS` (dispersion across sources) |
+| `adp*`                        | `02_ADP`                                     |
+| `miss_rate`                   | `10_RISK_INJURY_AGE`                         |
+| `weekly_cv`                   | `06_WEEKLY_CONSISTENCY`                      |
 
 ---
 
@@ -143,18 +160,30 @@ through pick 46.
 inside one standard error of each other. The model cannot currently tell them
 apart, and saying otherwise would be reading noise.
 
-**Two known limitations:**
+**Three known limitations:**
 
-1. Synthetic upside is *mean-preserving* — wider error bars, same expectation.
-   Real upside is right-skewed. A ceiling strategy has nothing genuine to buy in
-   this pool, so these results understate it. Needs real `proj_spread` and
-   `weekly_cv` to test properly.
-2. Strategy presets are hand-set rather than searched. Once the data lands, the
-   parameter space (`ceiling_weight`, `risk_penalty`, `ev_cap`, positional
-   bonuses) should be optimised directly instead of comparing named recipes.
+1. **43% of `proj_spread` values are a default, not a measurement.** The pool
+   estimates cross-source disagreement from a value proxy that omits passing
+   stats, so quarterbacks fall through to a flat default: 41 of 41 QBs and 35 of
+   50 TEs carry 0.22 or 0.29 rather than a measured dispersion, against 71 of 86
+   for running backs. `proj_spread` drives `up_spread`/`down_spread` and therefore
+   every ceiling and floor band in the UI, so those bands are constants for two
+   positions. Known, logged in `docs/CHANGE_LEDGER.md`, not yet fixed.
 
-**The bar before trusting recommendations:** backtest on 2023–2025 using each
-season's preseason ADP, and check that the recommended policy beat naive ADP
-drafting in those years. That's what `20_ADP_OUTCOME_HISTORY` is for. If it
-fails, fall back to tiers and alpha — itself a winning approach in a 10-team
-league.
+2. **`up_spread` and `down_spread` are identical in every shipped pool.** The
+   asymmetric-spread mechanism exists in the code and nothing currently feeds it
+   different values, so the p85 and p15 bands are mirror images in practice.
+
+3. Strategy presets are hand-set rather than searched. The parameter space
+   (`ceiling_weight`, `risk_penalty`, `ev_cap`, positional bonuses) should be
+   optimised directly instead of comparing named recipes.
+
+**The bar before trusting recommendations:** a backtest showing the recommended
+policy beats naive ADP drafting. The harness exists (`backtest.py`) and has been
+run across 2021–2025 — every measurement is in `docs/TEST_LOG.md` — but it has
+not cleared that bar. That is why `model_influence` ships at **Off**: the default
+board is market consensus reorganised for your league, not this model's opinion.
+Turning the model on is opt-in until the backtest earns it.
+
+Every adjustment to the model, every hypothesis tested against it, and every
+measurement taken lives in **`docs/CHANGE_LEDGER.md`** and **`docs/TEST_LOG.md`**.

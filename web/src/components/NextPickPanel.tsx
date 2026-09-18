@@ -55,7 +55,6 @@ export default function NextPickPanel({ settings, gone, mine, currentPick, targe
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings, gone, mine, currentPick, parsedOverride]);
 
   return (
