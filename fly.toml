@@ -12,7 +12,10 @@ primary_region = "iad"
   force_https = true
   auto_stop_machines = "stop"
   auto_start_machines = true
-  min_machines_running = 0 # Scales to zero when idle; the next request cold-starts a machine.
+  # One machine stays warm. Scaling to zero costs the first visitor ~5s of
+  # blank tab while the machine boots, all of it before the first byte, so
+  # there is nothing to render a spinner into.
+  min_machines_running = 1
   processes = ["app"]
 
   [[http_service.checks]]
