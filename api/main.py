@@ -9,6 +9,7 @@ read once at import time and reused across every request.
 """
 import dataclasses
 import math
+import os
 import sys
 from pathlib import Path
 
@@ -55,6 +56,13 @@ SCORING_BUILDERS = {
     "ppr": ff.Scoring.ppr,
     "standard": ff.Scoring.standard,
 }
+
+# Whether this deployment will run a live Monte Carlo. Defaults to enabled, so
+# local dev, the CLI and the tests are unaffected; the hosted deployment sets
+# FFSIM_LIVE_SIM=0 in fly.toml because one shared vCPU cannot serve a run whose
+# wall-clock time depends on the machine's remaining CPU burst budget rather
+# than on the request (see docs/CHANGE_LEDGER.md).
+LIVE_SIMULATION = os.environ.get("FFSIM_LIVE_SIM", "1") != "0"
 
 
 @app.get("/health")
@@ -166,6 +174,7 @@ def api_league(settings: LeagueSettingsRequest) -> LeagueResponse:
         scarcity=scarcity,
         players=players,
         picks=picks,
+        live_simulation=LIVE_SIMULATION,
     )
 
 
@@ -249,6 +258,19 @@ def api_next_pick(req: NextPickRequest) -> NextPickResponse:
 
 @app.post("/api/simulate", response_model=SimulateResponse)
 def api_simulate(req: SimulateRequest) -> SimulateResponse:
+    # First, before any work at all: on a single shared vCPU this endpoint is
+    # the one way a request can occupy the only core for minutes, so it must
+    # not get as far as building a league or touching a pool.
+    if not LIVE_SIMULATION:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Live simulation is disabled in this deployment: a single shared "
+                "vCPU cannot bound the wall-clock time of a Monte Carlo run. Run "
+                "it locally with `make dev`, or from the CLI via ffsim.evaluate."
+            ),
+        )
+
     league = build_league(req)
     pool = POOLS[req.scoring]
     unknown = [s for s in req.strategies if s not in ff.PRESETS]

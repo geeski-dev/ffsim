@@ -95,6 +95,10 @@ class LeagueResponse(BaseModel):
     scarcity: List[PositionScarcityRow]
     players: List[PlayerRow]
     picks: List[PickChip]
+    # False when this deployment cannot serve live simulation (see main.py).
+    # The frontend hides the Simulation panel rather than offering a control
+    # that would 503.
+    live_simulation: bool = True
 
 
 class SimulateRequest(LeagueSettingsRequest):

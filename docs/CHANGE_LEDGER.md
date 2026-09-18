@@ -147,6 +147,43 @@ On the current half-PPR pool, 12 teams, slot 6, Extreme variance with swing
 picks differed from Extreme without swing picks in 83/100 seeds, with 483
 differing user-pick slots.
 
+### CL-005 — BUG: production ran 710x slower than dev. LANDED, verified.
+
+**Term:** `OMP/OPENBLAS/MKL/NUMEXPR_NUM_THREADS`, in the production image.
+**The defect:** numpy's BLAS sizes its thread pool from the detected CPU count,
+which inside a container is the _host's_ rather than the VM's single shared
+core. Unset, it spawned a thread per host core, and every small array operation
+paid thread spawn and synchronization on a core that runs one thing at a time.
+Measured **21.31 s/sim-strategy** in production (639.2s ÷ 30 sim-strategies)
+against **0.030 s** on the dev machine.
+**Effect:** capping all four thread-count variables to 1 brought production to
+**0.1207 s** — a **176x** improvement, leaving a 4.0x dev/prod ratio consistent
+with one shared core.
+**Falsified if:** any measured production rate above ~0.2 s/sim-strategy means
+the cap is not in effect.
+
+**A second limit survives the fix.** Scaling holds only inside the machine's CPU
+burst budget: 300 sim-strategies ran at 0.121s each, while 1,000 was killed
+unfinished at 894.7s — at least 0.895s each, a **7x degradation** on code
+verified linear in `n_sims` (`evaluate` appends dicts and builds the DataFrame
+once after the loop). The budget is also history-dependent: the identical
+300-unit request measured 36.5s rested and over 360s following a heavy run. A
+request cap therefore cannot bound wall-clock time on this host, so the
+simulator is **disabled in the hosted deployment** (`FFSIM_LIVE_SIM=0` in
+`fly.toml`) and remains available locally and from the CLI.
+
+**Open work, in preference order.**
+
+1. The underlying cost is ~0.030s per simulated draft-and-season on a fast
+   machine, which is high for ~170 picks and 14 scoring weeks. Vectorizing the
+   pick loop is the only option that removes the constraint rather than working
+   around it.
+2. `evaluate` is deterministic at `seed=0`, so precomputed results for fixed
+   configurations could be served — honest, but covers only configurations
+   chosen in advance.
+3. A dedicated-CPU machine removes the burst cliff but not the underlying cost:
+   1,000 sims x 3 strategies would still take roughly 6 minutes.
+
 ---
 
 ## OPEN PROBLEM — we have no projectable indicator of a high ceiling

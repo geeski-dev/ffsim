@@ -62,6 +62,7 @@ export interface LeagueResponse {
   scarcity: PositionScarcityRow[];
   players: PlayerRow[];
   picks: PickChip[];
+  live_simulation: boolean;
 }
 
 export interface SimulateRequest extends LeagueSettings {

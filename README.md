@@ -30,9 +30,10 @@ scoring rule.
 
 ![Next pick](docs/next-pick.png)
 
-_The draft view. “Take now” and “Can wait” are the simulator's output — the
-probability each player survives to your next pick, given how the other teams
-in the room are likely to draft._
+_The draft view. “Take now” and “Can wait” are the probability each player
+survives to your next pick — a two-piece normal around his ADP, wider on the
+downside because players fall further than they rise. Arithmetic, not a
+simulation, so it costs milliseconds and is always available._
 
 ---
 
@@ -160,7 +161,7 @@ through pick 46.
 inside one standard error of each other. The model cannot currently tell them
 apart, and saying otherwise would be reading noise.
 
-**Three known limitations:**
+**Four known limitations:**
 
 1. **43% of `proj_spread` values are a default, not a measurement.** The pool
    estimates cross-source disagreement from a value proxy that omits passing
@@ -177,6 +178,18 @@ apart, and saying otherwise would be reading noise.
 3. Strategy presets are hand-set rather than searched. The parameter space
    (`ceiling_weight`, `risk_penalty`, `ev_cap`, positional bonuses) should be
    optimised directly instead of comparing named recipes.
+
+4. **The hosted demo omits the simulator, by choice.** It runs on one shared
+   vCPU, where a Monte Carlo run's wall-clock time depends on the machine's
+   remaining CPU burst budget rather than on the request: 100 sims x 3
+   strategies took 36.5s, while 1,000 x 1 was killed unfinished at 894.7s
+   against a 121s linear prediction. The same 300-unit request measured 36.5s
+   rested and over 360s after a heavy run, so no request cap can bound it.
+   The Simulate tab is therefore absent from the hosted build and the endpoint
+   returns 503; everything else — board, draft mode, next-pick availability —
+   is unaffected, and the simulator runs normally via `make dev` or the CLI.
+   Measurements and the optimisation path are in `docs/CHANGE_LEDGER.md`
+   (CL-005).
 
 **The bar before trusting recommendations:** a backtest showing the recommended
 policy beats naive ADP drafting. The harness exists (`backtest.py`) and has been

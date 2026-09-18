@@ -192,12 +192,36 @@ export default function App() {
     };
   }, [settings]);
 
+  // Whether this deployment will run a live Monte Carlo. Unknown until the
+  // first /api/league response lands, and treated as unavailable until then --
+  // better to reveal the tab a moment late than to offer a run that 503s.
+  const liveSimulation = league?.live_simulation ?? false;
+  // A 'simulate' mode restored from localStorage (persisted before the hosted
+  // deployment disabled the simulator) would otherwise render an empty page
+  // with no tab to leave by. Fall back to the board instead of stranding it.
+  const activeMode = mode === 'simulate' && !liveSimulation ? 'board' : mode;
+
+  // ...and then settle the stored mode to match. This goes through changeMode
+  // rather than relying on the derived fallback alone because changeMode also
+  // runs the positionFilter guard: a filter set in draft mode ('Needed'),
+  // carried through a visit to Simulate, and restored on a build with no
+  // simulator would otherwise land on the board still filtering, with no chip
+  // showing active. Waits for `league` so it can't fire during the window
+  // where live_simulation is merely unknown. The setState here is driven by a
+  // server response -- the external-system case the rule exists to allow.
+  useEffect(() => {
+    if (league && !liveSimulation && mode === 'simulate') {
+      // oxlint-disable-next-line react/set-state-in-effect
+      changeMode('board');
+    }
+  }, [league, liveSimulation, mode, changeMode]);
+
   return (
     <AboutNavigationContext.Provider value={{ navigateToAbout }}>
       <div className="root">
-        <Banner collapsed={mode === 'draft'} />
+        <Banner collapsed={activeMode === 'draft'} />
         <div className="app">
-          {mode !== 'about' && (
+          {activeMode !== 'about' && (
             <p className="tagline">
               Find the <strong className="tagline-chase">mispriced</strong> players, not the{' '}
               <strong className="tagline-resist">good</strong> ones.
@@ -205,31 +229,33 @@ export default function App() {
           )}
 
           <nav className="nav-tabs" aria-label="Primary">
-            <button type="button" className={mode === 'board' ? 'active' : ''} onClick={() => changeMode('board')}>
+            <button type="button" className={activeMode === 'board' ? 'active' : ''} onClick={() => changeMode('board')}>
               Board
             </button>
-            <button type="button" className={mode === 'draft' ? 'active' : ''} onClick={() => changeMode('draft')}>
+            <button type="button" className={activeMode === 'draft' ? 'active' : ''} onClick={() => changeMode('draft')}>
               Draft
             </button>
-            <button type="button" className={mode === 'simulate' ? 'active' : ''} onClick={() => changeMode('simulate')}>
-              Simulate
-            </button>
-            <button type="button" className={mode === 'about' ? 'active' : ''} onClick={() => navigateToAbout()}>
+            {liveSimulation && (
+              <button type="button" className={activeMode === 'simulate' ? 'active' : ''} onClick={() => changeMode('simulate')}>
+                Simulate
+              </button>
+            )}
+            <button type="button" className={activeMode === 'about' ? 'active' : ''} onClick={() => navigateToAbout()}>
               About
             </button>
           </nav>
 
-        {mode !== 'about' && (
+        {activeMode !== 'about' && (
           <>
             <SettingsPanel
               settings={settings}
               onChange={handleSettingsChange}
               onReset={resetSettings}
-              draftMode={mode === 'draft'}
+              draftMode={activeMode === 'draft'}
               collapsed={settingsCollapsed}
               onCollapsedChange={setSettingsCollapsed}
             />
-            {mode === 'draft' && (
+            {activeMode === 'draft' && (
               <div className="panel draft-status-bar">
                 <span className="stat">Overall pick <strong>{draft.draftPosition}</strong></span>
                 <span className="stat">{draft.mineSet.size} mine · {draft.goneSet.size} gone</span>
@@ -242,13 +268,13 @@ export default function App() {
         )}
 
         <div className="board-area" ref={boardAreaRef}>
-          {mode === 'about' && (
+          {activeMode === 'about' && (
             <div className="panel">
               <AboutPage />
             </div>
           )}
-          {mode === 'simulate' && <SimulationPanel settings={settings} />}
-          {(mode === 'board' || mode === 'draft') && (
+          {activeMode === 'simulate' && <SimulationPanel settings={settings} />}
+          {(activeMode === 'board' || activeMode === 'draft') && (
             <>
               {error && <div className="error">Could not reach the API: {error}</div>}
               {!error && !league && (
@@ -262,11 +288,11 @@ export default function App() {
                   <DraftPosition
                     picks={league.picks}
                     hedgeWindow={league.hedge_window}
-                    selectedPick={mode === 'draft' ? targetPick : undefined}
-                    onSelectPick={mode === 'draft' ? selectPick : undefined}
+                    selectedPick={activeMode === 'draft' ? targetPick : undefined}
+                    onSelectPick={activeMode === 'draft' ? selectPick : undefined}
                   />
                   <ScarcityTable rows={league.scarcity} />
-                  {mode === 'draft' && (
+                  {activeMode === 'draft' && (
                     <div ref={nextPickPanelRef}>
                       <NextPickPanel
                         settings={settings}
@@ -284,7 +310,7 @@ export default function App() {
                     modelInfluence={settings.model_influence}
                     boardState={boardState}
                     onBoardStateChange={handleBoardStateChange}
-                    mode={mode}
+                    mode={activeMode}
                     lineup={settings.lineup}
                     goneSet={draft.goneSet}
                     mineSet={draft.mineSet}

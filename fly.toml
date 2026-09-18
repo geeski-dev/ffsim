@@ -6,6 +6,13 @@ primary_region = "iad"
 
 [env]
   PORT = "8080"
+  # One shared vCPU cannot serve a live simulation. Measured: 36.5s for 100
+  # sims x 3 strategies, and 1000 x 1 exceeded 894s against a 121s linear
+  # prediction once the CPU burst budget ran out. Throughput is also
+  # history-dependent -- the same request took 36.5s rested and over 360s
+  # after a heavy run -- so no request cap can bound wall-clock time here.
+  # Disabled until the pick loop is optimised (docs/CHANGE_LEDGER.md).
+  FFSIM_LIVE_SIM = "0"
 
 [http_service]
   internal_port = 8080

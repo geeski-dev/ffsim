@@ -20,15 +20,29 @@
    `/api` and the built frontend at `/` from the same origin — there is no
    separate frontend deploy, and no CORS configuration to maintain.
 
-4. Set any required Fly secrets, then deploy:
+4. Decide whether this deployment serves live simulation.
+
+   `fly.toml` sets `FFSIM_LIVE_SIM = "0"`, which is the one setting in that
+   file you have to make a decision about. With it set to `"0"`, `/api/simulate`
+   returns 503 before doing any work and the frontend hides the Simulate tab
+   entirely. Unset or any other value enables it, which is the default
+   everywhere else — local dev, the CLI and the tests are unaffected.
+
+   Leave it at `"0"` on any shared-CPU machine. A Monte Carlo run's wall-clock
+   time there depends on the machine's remaining CPU burst budget rather than
+   on the request, so no request cap can bound it; the measurements are in
+   `docs/CHANGE_LEDGER.md` (CL-005). Only turn it on after moving to a
+   dedicated CPU or optimising the pick loop.
+
+5. Set any required Fly secrets, then deploy:
 
    `fly deploy`
 
-5. Verify the API health check:
+6. Verify the API health check:
 
    `curl https://<fly-app>.fly.dev/health`
 
-6. Verify the frontend is being served from the same app:
+7. Verify the frontend is being served from the same app:
 
    `curl -I https://<fly-app>.fly.dev/`
 
@@ -36,7 +50,7 @@
    missing from the image — `api/main.py` skips the static mount when the
    directory isn't there, so the API still answers while the board does not.
 
-7. Leave `VITE_API_URL` unset for this deploy. The client falls back to
+8. Leave `VITE_API_URL` unset for this deploy. The client falls back to
    relative `/api` paths, which is what single-origin serving needs; setting
    it would point the bundled frontend at a different host. It exists for the
    case where the frontend is hosted separately from the API.
